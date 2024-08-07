@@ -1,0 +1,45 @@
+# ################################# #
+# schemas for info extractor models #
+# ################################# #
+
+from typing import Optional 
+from langchain_core.pydantic_v1 import BaseModel, Field 
+
+class Suspensions(BaseModel):
+	"""
+	the schema of the Suspension. Information extractor chain uses this schema class
+		to extract information from a RAG generated text from a pdf file. 
+	:param citation: citation of the article 
+	:type citation: str
+	:param solid_fractions : solid fractions mentioned in the text
+	:type solid_fractions : str
+	:characterization_method : the characterization methods used by authors
+	:type characterization_method: str
+	:materials : materials used by authors in this study 
+	:type materials: str
+	:particles : shape and type of particles; example can be sphreical hard spheres
+	:type particles : str
+	:particle_size: size of particles in this study
+	:type particle_size: str
+	:particle_density: density of particles 
+	:type particle_density: str 
+	:fluid_density: density of the suspending fluid 
+	:type fluid_density: str 
+	:fluid_viscosity: viscosity of the suspending fluid 
+	:type fluid_viscosity: str
+	:dimensionless_numbers: dimensionless numbers in this work
+	:type dimensionless_numbers: str 
+	"""
+	#authors: Optional[str] = Field(default = None, description="authors of the work")
+	citation: Optional[str] = Field(default = None, description="citation of the current article")
+	solid_fractions: Optional[str] = Field(default = None, description="the volume fractions in the study")
+	characterization_method: Optional[str] = Field(default = None, description="smethod of characterization used by authors")
+	materials: Optional[str] = Field(default = None, description="materials used by authors")
+	particles: Optional[str] = Field(default = None, description="shape and type of particles in the suspension")
+	particle_size: Optional[str] = Field(default = None, description="size of particles used in the study")
+	particle_density: Optional[str] = Field(default = None, description = "density of particles")
+	fluid_density: Optional[str] = Field(default = None, description="density of the suspending fluid")
+	fluid_viscosity: Optional[str] = Field(default = None, description = "viscosity of the suspending fluid")
+	dimensionless_numbers: Optional[str] = Field(default = None, description = "dimensionless numbers that are important in this work")
+
+SCHEMAS = {'suspensions': Suspensions}
