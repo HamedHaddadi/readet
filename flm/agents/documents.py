@@ -4,8 +4,10 @@
 # Includes:									#
 #	1) GoogleScholar search 				#
 # ######################################### #
+import plotly 
 import pandas as pd 
 import plotly.express as px 
+from os import path 
 from collections.abc import Callable 
 from langchain.agents import AgentExecutor, create_tool_calling_agent 
 from langchain_openai import ChatOpenAI 
@@ -42,7 +44,7 @@ class ScholarSearch(Callable):
 		self.executor = AgentExecutor(agent = create_tool_calling_agent(llm, [search_tool], prompt),
 				 tools = tools, verbose = True, 
 				 			return_intermediate_steps = True)
-	
+
 	@staticmethod 
 	def _parse_to_df(response: str) -> pd.DataFrame:
 		results = {'Title': [],
@@ -59,14 +61,38 @@ class ScholarSearch(Callable):
 			elif 'Total-Citations' in line:
 				results['Number of Citations'].append(int(line.split(':')[1].lstrip()))			
 		return pd.DataFrame.from_dict(results)
-				
-	def __call__(self, query: str, output: str = 'txt', 
-						output_path: str = 'txt') -> pd.DataFrame:
+	
+	@staticmethod
+	def to_txt(results: pd.DataFrame, filename: str) -> None:
+		with open(filename, 'w') as f:
+			for n_row in range(len(results.index)):
+				for label in results.columns:
+					f.write('*' + label + ': \n')
+					f.write(str(results.loc[n_row, label]))
+					f.write('\n')
+				f.write('************************* \n')
+
+	@staticmethod
+	def to_bar_chart_html(results: pd.DataFrame, filename: str) -> None:
+		fig = px.bar(results, y = 'Authors', 
+			x = 'Number of Citations', orientation = 'h', 
+					color = 'Number of Citations', color_continuous_scale = 'Turbo',
+						hover_name = 'Authors', hover_data = ['Reference'],
+                 height = len(results.index)*30,
+				template = 'seaborn')
+		fig.layout.font.family = 'Gill Sans'
+		fig.layout.font.size = 15
+		fig.layout.xaxis.gridcolor = 'black'
+		fig.layout.yaxis.gridcolor = 'black'
+		fig.layout.xaxis.titlefont.family = 'Gill Sans'
+		fig.layout.xaxis.titlefont.size = 15
+		fig.layout.xaxis.tickfont.size = 15
+		plotly.offline.plot(fig, filename=filename)
+		
+	def __call__(self, query: str, output_dir: str) -> None:
 		response = self.executor.invoke({"input": query}, 
 					return_only_outputs = True)
 		results_df = self._parse_to_df(response["intermediate_steps"][0][1])
-		return results_df 
-		
-		
-	
-	
+		results_df.sort_values('Number of Citations', inplace = True)
+		self.to_bar_chart_html(results_df, path.join(output_dir, 'citations.html'))
+		self.to_txt(results_df, path.join(output_dir, 'articles.txt'))

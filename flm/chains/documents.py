@@ -29,17 +29,17 @@ class RAGSinglePDF:
 	chain will be invoked by the caller to get the output text. Question will be input by the caller
 	"""
 	init_keys = ['pdf_file', 'chunk_size', 'chunk_overlap', 'chat_model', 
-						'embedding_model', 'prompt_template', 'temperature', 'replacements']
+						'embedding_model', 'schema', 'temperature', 'replacements']
 
 	def __init__(self, pdf_file: str, chunk_size: int = 2000,
 	 				chunk_overlap: int = 150,
 					 	 chat_model: str = 'openai-chat', 
 						  	embedding_model: str = 'openai-embedding',
-						  	prompt_template: str = 'suspensions', 
+						  	schema: str = 'suspensions', 
 							  	temperature: int = 0, 
 								  	replacements: Optional[Dict[str, str]] = None):
 		self.retriever = None 
-		self.prompt_template = prompts.TEMPLATES[prompt_template]
+		self.prompt_template = prompts.TEMPLATES[schema]
 		self.prompt = None 
 		self.llm = models.configure_chat_model(chat_model, temperature = temperature)
 		self.parser = StrOutputParser()
