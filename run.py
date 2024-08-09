@@ -1,7 +1,7 @@
-from os import path, makedirs, getcwd
+from os import path, makedirs, getcwd, listdir 
 from datetime import datetime  
 import argparse
-from tkinter import S 
+from pathlib import Path 
 from dotenv import load_dotenv 
 from flm.agents.documents import ScholarSearch 
 from flm.builders.documents import SchemaFromPDF 
@@ -27,11 +27,21 @@ def run_schema_from_pdf() -> None:
 	schemas = input("Enter the Schema name; it must already be available in utils/schemas: ")
 	output_dir = input(""" Enter directory of the existing
 							 schema to append to existing csv file else pass: \n""")
-	pdf_file = input("pdf file to query: enter the path and file name: \n")
-
+	pdf = input("""pdf file or directory to query:
+						 Enter a path to query all pdf files and append them to a single csv file: \n""")
 	if len(output_dir) == 0:
 		output_dir = make_dir('data_from_pdf')
-	SchemaFromPDF(pdf_file, schemas, save_path = output_dir)()	
+	
+	pdf = Path(pdf)
+	
+	if pdf.is_file():
+		SchemaFromPDF(schemas, save_path = output_dir)(pdf)
+	
+	elif pdf.is_dir():
+		pdf_files = [path.join(pdf, pdf_file) for pdf_file in listdir(pdf)]
+		print(pdf_files)
+		for pdf_file in pdf_files:
+			SchemaFromPDF(schemas, save_path = output_dir)(pdf_file)
 	
 
 if __name__ == '__main__':

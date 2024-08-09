@@ -28,10 +28,10 @@ class RAGSinglePDF:
 	returns a runnbale chain of ({retriever, question} | prompt | llm | parser)
 	chain will be invoked by the caller to get the output text. Question will be input by the caller
 	"""
-	init_keys = ['pdf_file', 'chunk_size', 'chunk_overlap', 'chat_model', 
+	init_keys = ['chunk_size', 'chunk_overlap', 'chat_model', 
 						'embedding_model', 'schema', 'temperature', 'replacements']
 
-	def __init__(self, pdf_file: str, chunk_size: int = 2000,
+	def __init__(self, chunk_size: int = 2000,
 	 				chunk_overlap: int = 150,
 					 	 chat_model: str = 'openai-chat', 
 						  	embedding_model: str = 'openai-embedding',
@@ -43,28 +43,26 @@ class RAGSinglePDF:
 		self.prompt = None 
 		self.llm = models.configure_chat_model(chat_model, temperature = temperature)
 		self.parser = StrOutputParser()
-		self._configure(pdf_file, chunk_size, chunk_overlap, embedding_model, replacements)
+		self.replacements = replacements 
+		self._configure(chunk_size, chunk_overlap, embedding_model)
 	
-	def _configure(self, pdf_file: str, chunk_size: int,
-				 			chunk_overlap: int,
-							 	 embedding_model: str, 
-								  	replacements: Optional[Dict[str, str]] = None) -> None:
-		
-		loader = PyPDFLoader(pdf_file)
-		doc = loader.load()
-		if replacements is not None:
-			doc = docs.format_doc_object(doc, replacements)
-		splitter = RecursiveCharacterTextSplitter(chunk_size = chunk_size,
+	
+	def _configure(self, chunk_size: int, chunk_overlap: int, embedding_model: str) -> None:
+		self.splitter = RecursiveCharacterTextSplitter(chunk_size = chunk_size,
 						 chunk_overlap = chunk_overlap, add_start_index = True, 
 						 		separators = ["\n\n", "\n", "(?<=\. )", " ", ""])
-		splits = splitter.split_documents(doc)
-		embedding = models.configure_embedding_model(embedding_model)
-		store = Chroma.from_documents(documents = splits, embedding = embedding)
-		self.retriever = store.as_retriever()
+		self.embedding = models.configure_embedding_model(embedding_model)
 		self.prompt = PromptTemplate.from_template(self.prompt_template)
 	
-	def __call__(self) -> RunnableSequence:
-		return ({'context': self.retriever, 'question': RunnablePassthrough()} | self.prompt | self.llm | self.parser)
+	def __call__(self, pdf_file: str) -> RunnableSequence:
+		loader = PyPDFLoader(pdf_file)
+		doc = loader.load()
+		if self.replacements is not None:
+			doc = docs.format_doc_object(doc, self.replacements)
+		splits = self.splitter.split_documents(doc)
+		store = Chroma.from_documents(documents = splits, embedding = self.embedding)
+		retriever = store.as_retriever()
+		return ({'context': retriever, 'question': RunnablePassthrough()} | self.prompt | self.llm | self.parser)
 	
 
 RAGS = {'single-pdf': RAGSinglePDF}
