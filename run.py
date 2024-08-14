@@ -3,8 +3,10 @@ from datetime import datetime
 import argparse
 from pathlib import Path 
 from dotenv import load_dotenv 
-from flm.agents.documents import ScholarSearch 
-from flm.builders.documents import SchemaFromPDF 
+from langchain_community.callbacks import get_openai_callback 
+from flm.documents.agents import ScholarSearch 
+from flm.documents.functions import SchemaFromPDF
+from flm.documents.graphs import SelfRAGSinglePDF 
 
 KEYS = '/Users/hamedhaddadi/Documents/ComplexFluidInformatics/builder/fluidllm/flm/configs/keys.env'
 load_dotenv(KEYS)
@@ -31,18 +33,34 @@ def run_schema_from_pdf() -> None:
 						 Enter a path to query all pdf files and append them to a single csv file: \n""")
 	if len(output_dir) == 0:
 		output_dir = make_dir('data_from_pdf')
-	
 	pdf = Path(pdf)
-	
 	if pdf.is_file():
 		SchemaFromPDF(schemas, save_path = output_dir)(pdf)
-	
 	elif pdf.is_dir():
 		pdf_files = [path.join(pdf, pdf_file) for pdf_file in listdir(pdf)]
-		print(pdf_files)
 		for pdf_file in pdf_files:
 			SchemaFromPDF(schemas, save_path = output_dir)(pdf_file)
-	
+
+def run_pdf_query() -> None:
+	"""
+	query a pdf file using SelfRAG 
+	"""
+	pdf = input("Enter the full path and name of the pdf file: \n")
+	self_rag = SelfRAGSinglePDF(pdf)
+	go_on = True 
+	while go_on:
+		query = input("Enter your question regarding this document: \n")
+		self_rag(query)
+		print('**********')
+		go = input("Do you have more questions? Y/N? \n")
+		if go == 'Y':
+			go_on = True
+		elif go == 'N':
+			print('Have a good day! ;)')
+			go_on = False 
+		else:
+			print('Your response was not clear! Finish')
+			go_on = False  
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description = 'reads command line of modules to run')
@@ -50,5 +68,7 @@ if __name__ == '__main__':
 	apps = parser.parse_args().appnames 
 	for app in apps:
 		{'search_scholar': run_scholar_search, 
-			'schema_from_pdf': run_schema_from_pdf}[app]()
+			'schema_from_pdf': run_schema_from_pdf, 
+				'query_pdf': run_pdf_query}[app]()
+		
 

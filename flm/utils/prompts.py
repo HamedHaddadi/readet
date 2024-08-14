@@ -36,7 +36,44 @@ REDUCE = """
     Helpful Answer:
 """
 
+# ###### Self-RAG Templates ###### #
+RETRIEVAL_GRADER = """
+You are a grader assessing relevance of a retrieved answer to a user question. \n 
+    It does not need to be a stringent test. The goal is to filter out erroneous retrievals. \n
+    	If the answer contains keyword(s) or semantic meaning related to the user question, grade it as relevant. \n
+    	Give a binary score 'yes' or 'no' score to indicate whether the answer is relevant to the question.
+"""
+RAG = """
+	You are an assistant for question-answering tasks. 
+		Use the following pieces of retrieved context to answer the question.
+		 If you don't know the answer, just say that you don't know. 
+		 	Use two sentences maximum and keep the answer concise.
+	Question: {question} 
+	Context: {context} 
+	Answer:
+"""
+HALLUCINATION_GRADER = """
+		You are a grader assessing whether an LLM generation is grounded in / supported by a set of retrieved facts. \n 
+     Give a binary score 'yes' or 'no'. 'Yes' means that the answer is grounded in / supported by the set of facts.
+			"""
+
+ANSWER_GRADER = """
+		You are a grader assessing whether an answer addresses / resolves a question \n 
+     		Give a binary score 'yes' or 'no'. Yes' means that the answer resolves the question.	
+"""
+
+QUESTION_REWRITER = """
+		You a question re-writer that converts an input question to a better version that is optimized \n 
+     		for vectorstore retrieval. Look at the input and try to reason about the underlying semantic intent / meaning.	
+"""
+
+
 TEMPLATES = {'suspensions': SUSPENSIONS, 
-					'map-reduce': [MAP, REDUCE]}
+					'map-reduce': [MAP, REDUCE], 
+						'self-rag': {'retrieval-grader':RETRIEVAL_GRADER,
+										'rag': RAG, 
+											'hallucination-grader': HALLUCINATION_GRADER, 
+												'answer-grader': ANSWER_GRADER, 
+													'question-rewriter': QUESTION_REWRITER}}
 
 
