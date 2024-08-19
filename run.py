@@ -17,6 +17,7 @@ def make_dir(module_name):
 		makedirs(dirname)
 	return dirname 
 
+# this function does not work due to an error in langchain_core.pydantic_v1 
 def run_scholar_search() -> None:
 	output_dir = make_dir('scholar_search')
 	num_inputs = input("Enter the number of articles to search: ")
@@ -67,8 +68,7 @@ if __name__ == '__main__':
 	parser.add_argument('appnames', nargs = '*', type = str, help = 'names of apps to run')
 	apps = parser.parse_args().appnames 
 	for app in apps:
-		{'search_scholar': run_scholar_search, 
-			'schema_from_pdf': run_schema_from_pdf, 
+		{'schema_from_pdf': run_schema_from_pdf, 
 				'query_pdf': run_pdf_query}[app]()
 		
 
