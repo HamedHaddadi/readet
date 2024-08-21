@@ -2,7 +2,7 @@
 # schemas for info extractor models #
 # ################################# #
 
-from typing import Optional 
+from typing import Optional, List  
 from langchain_core.pydantic_v1 import BaseModel, Field 
 
 class Suspensions(BaseModel):
@@ -42,4 +42,16 @@ class Suspensions(BaseModel):
 	fluid_viscosity: Optional[str] = Field(default = None, description = "viscosity of the suspending fluid")
 	dimensionless_numbers: Optional[str] = Field(default = None, description = "dimensionless numbers that are important in this work")
 
-SCHEMAS = {'suspensions': Suspensions}
+# schemas that can be used to extract information from a paper
+class RawMaterials(BaseModel):
+	"""
+	The schema of the Raw Materials. 
+	Information extractor chain uses this schema class
+	to extract information from a RAG generated output that queries a pdf file. 
+	:param results : names of the raw materials mentioned in the text
+	:type results : List[str]
+	"""
+	results: List[str]
+
+
+SCHEMAS = {'suspensions': Suspensions, 'raw_materials': RawMaterials}

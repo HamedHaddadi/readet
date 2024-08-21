@@ -2,7 +2,7 @@
 # module includes chains useful for interaction with documents #
 # ############################################################ #
 
-from typing import Optional, Dict, List, TypeVar  
+from typing import Optional, Dict, List, TypeVar, Union  
 from langchain_community.document_loaders import PyPDFLoader 
 from langchain_text_splitters import RecursiveCharacterTextSplitter, CharacterTextSplitter 
 from langchain_chroma import Chroma 
@@ -35,11 +35,11 @@ class RAGSinglePDF:
 	 				chunk_overlap: int = 150,
 					 	 chat_model: str = 'openai-chat', 
 						  	embedding_model: str = 'openai-embedding',
-						  	schema: str = 'suspensions', 
+						  	prompt: str = 'suspensions', 
 							  	temperature: int = 0, 
 								  	replacements: Optional[Dict[str, str]] = None):
 		self.retriever = None 
-		self.prompt_template = prompts.TEMPLATES[schema]
+		self.prompt_template = prompts.TEMPLATES[prompt]
 		self.prompt = None 
 		self.llm = models.configure_chat_model(chat_model, temperature = temperature)
 		self.parser = StrOutputParser()
@@ -78,13 +78,17 @@ DEFAULT_PROMPT = """You are an expert extraction algorithm.
             return null."""	
 
 # plain extactor chain
-def plain(chat_model:str = 'openai-chat',
-			 temperature: int = 0, schemas: List[str] = None) -> Dict[str, RunnableSequence]:
+def extract_schema_plain(schemas: Union[List[str], str], 
+				chat_model:str = 'openai-chat', 
+			 			temperature: int = 0) -> Union[Dict[str, RunnableSequence], RunnableSequence]:
 	prompt = ChatPromptTemplate.from_messages([("system", DEFAULT_PROMPT), ("human", "{text}")])
 	llm = models.configure_chat_model(chat_model, temperature = temperature)
-	return {schema: (prompt | llm.with_structured_output(schema = SCHEMAS[schema])) for schema in schemas}
+	if isinstance(schemas, list):
+		return {schema: (prompt | llm.with_structured_output(schema = SCHEMAS[schema])) for schema in schemas}
+	elif isinstance(schemas, str):
+		return (prompt | llm.with_structured_output(schema = SCHEMAS[schemas]))
 
-EXTRACTORS = {'plain': plain}
+EXTRACTORS = {'plain': extract_schema_plain}
 
 # ####################################### #
 #  		text summary tools		          #

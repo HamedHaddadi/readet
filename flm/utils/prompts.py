@@ -20,6 +20,17 @@ SUSPENSIONS = """
     Helpful Answer:	
 """
 
+# ###### 	Default RAG		  ####### #
+SCHEMA_RAG = """
+        You are an assistant for question-answering tasks. 
+        Use the following pieces of retrieved context to answer 
+        the question. If you don't know the answer, say that you 
+        don't know. 
+        {context}
+        Question: {question}
+        Helpful Answer:	
+"""
+
 # ###### Chain specific prompts ###### #
 MAP = """
     the following contains a set of documents.
@@ -67,9 +78,9 @@ QUESTION_REWRITER = """
      		for vectorstore retrieval. Look at the input and try to reason about the underlying semantic intent / meaning.	
 """
 
-
 TEMPLATES = {'suspensions': SUSPENSIONS, 
 					'map-reduce': [MAP, REDUCE], 
+						'schema-rag': SCHEMA_RAG, 
 						'self-rag': {'retrieval-grader':RETRIEVAL_GRADER,
 										'rag': RAG, 
 											'hallucination-grader': HALLUCINATION_GRADER, 

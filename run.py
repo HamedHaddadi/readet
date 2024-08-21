@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from os import path, makedirs, getcwd, listdir 
 from datetime import datetime  
 import argparse
