@@ -1,4 +1,4 @@
-#**flm (Fluid Language Model)**
+# **flm (Fluid Language Model)**
 Contains collection of tools, chains agents and graphs to search the literature, summarize articles and create databases
 useful for complex fluid research. 
 All tools can be applied to any other field of technical research.
@@ -28,11 +28,12 @@ After activation of the environment run the driver script _run.py_ by:
 ``` console
 ./run.py <name of the functions>
 ```
-
-currently, three choices are supported:
-_query_pdf_: which is used to query a pdf document using self-reflective Retrieval Augmented Generation 
-_search_scholar_: which is used to search the google scholar and output the results in an interactive graph
-_schema_from_pdf_: which is used to extract schema from pdf for building databases 
+### Instantiate classes and run functions
+currently, these choices are supported but I am adding features weekly: <br/>
+➡️ _query_pdf_: which is used to query a pdf document using self-reflective Retrieval Augmented Generation <br/> 
+➡️ _search_scholar_: which is used to search the google scholar and output the results in an interactive graph <br/>
+➡️ _schema_from_pdf_: which is used to extract schema from pdf for building databases <br/>
+➡️ _query_pdf_and_search_: which is used to query a pdf file for specific information and perform a more comprehesive search on retrieved information. <br/>
 
 
 
