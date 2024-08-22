@@ -28,6 +28,20 @@ After activation of the environment run the driver script _run.py_ by:
 ``` console
 ./run.py <name of the functions>
 ```
+### apply and obtain API_Keys
+You will need API keys for the following services: <br/>
+➡️ _OpenAI_ : for chat and embedding models <br/>
+➡️ _Langchain_ : For using LangSmith <br/>
+➡️ _Tavily search_: For Tavily search tools <br/>
+➡️ _SerpAI_ : For Google Scholar tools <br />
+The easiest way is to store your API keys with the following names in a _key.env_ files in a separate directory called _configs_. <br/>
+I recommend using the following keys and formats: <br/>
+_OPENAI_API_KEY_ = "your API key" <br/> 
+_LANGCHAIN_API_KEY_ = "your API key" <br/>
+_TAVILY_API_KEY_ = "your API key" <br/>
+_SERP_API_KEY_ = "your API key" <br/>
+Then define the path to your _keys.env_ in the _KEYS_ variable in run.py file. <br/>
+
 ### Instantiate classes and run functions
 currently, these choices are supported but I am adding features weekly: <br/>
 ➡️ _query_pdf_: which is used to query a pdf document using self-reflective Retrieval Augmented Generation <br/> 
@@ -41,6 +55,10 @@ Let's query a [scientific paper on interfacial rheology](https://pubs.acs.org/do
 ``` console
 ./run query_pdf_and_search
 ```
+you will be prompted to enter the full path and name of the pdf file that you stored on your local machine. <br/>
+Currently, I use path on Linux systems. <\br>
+
+
 
 
 
