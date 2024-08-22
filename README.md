@@ -35,6 +35,14 @@ currently, these choices are supported but I am adding features weekly: <br/>
 ➡️ _schema_from_pdf_: which is used to extract schema from pdf for building databases <br/>
 ➡️ _query_pdf_and_search_: which is used to query a pdf file for specific information and perform a more comprehesive search on retrieved information. <br/>
 
+### Example
+Let's query a [scientific paper on interfacial rheology](https://pubs.acs.org/doi/full/10.1021/acs.langmuir.2c00460?casa_token=WZcUAM0NbEsAAAAA%3AgUutytC-cTT6fJud7B9Buuof3ZxObYdYhwJCa0nX6aVLogZjQwpjiSDtvvU-_yBDb_sbAJBSP1D5sFQ) and perform a google search on retrieved information. We can query this document for the raw materials used to conduct the experiments. <br/>
+
+``` console
+./run query_pdf_and_search
+```
+
+
 
 
 
