@@ -56,7 +56,7 @@ Let's query a [scientific paper on interfacial rheology](https://pubs.acs.org/do
 ./run query_pdf_and_search
 ```
 you will be prompted to enter the full path and name of the pdf file that you stored on your local machine. <br/>
-Currently, I use path on Linux systems. <\br>
+Currently, I use path on the Linux system. <br/>
 
 
 
