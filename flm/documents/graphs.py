@@ -317,7 +317,7 @@ class QueryPDFAndSearch(Callable):
 	Then uses a ReAct Tavily search agent to search the internet for 
 	more information about retrieved keywords
 	"""
-	def __init__(self, pdf_file: str, schemas: str,
+	def __init__(self, pdf_file: str, schemas: str = 'general',
 					added_message: str = "",  chunk_size: int = 2000, 
 					chunk_overlap: int = 150, chat_model: str = 'openai-chat', 
 							embedding_model: str = 'openai-embedding', 
@@ -331,32 +331,29 @@ class QueryPDFAndSearch(Callable):
 		schema_chain =  chains.extract_schema_plain(chat_model = chat_model, 
 								temperature = temperature, schemas = schemas)
 		self.rag_schema_chain = (rag_chain | schema_chain)
-		#print(f'<<<>>>  invoking rag schema chain: ', self.rag_schema_chain.invoke("what are raw materials mentioned in this study?"))
-
 		#. build the search agent
 		search = TavilySearchResults(max_results = max_search_results)
 		llm = models.configure_chat_model(chat_model, temperature = temperature)
 		self.llm_model = llm.bind_tools([search])
 		self.message_to_model = added_message 
-		self.tool_node = ToolNode([search])
+		self._tool_node = ToolNode([search])
 		self._configure_graph()
 	
 	# methods called by graph nodes 
-	def call_rag(self, input: MessagesState) -> Dict[Literal["messages"], List[str]]:
+	def _call_rag(self, input: MessagesState) -> Dict[Literal["messages"], List[str]]:
 		messages = input["messages"][0].content
-		#messages = "what are the raw materials mentioned in this study?"
 		response = self.rag_schema_chain.invoke(messages)
 		return {"messages": response.results}
 	
-	def call_model(self, state: MessagesState) -> Dict[Literal["messages"], AIMessage]:
+	def _call_model(self, state: MessagesState) -> Dict[Literal["messages"], AIMessage]:
 		messages = state["messages"]
 		if len(messages) == 1:
-			response = self.llm_model.invoke(f"find me for information about {','.join([res for res in messages[0]])} and {self.message_to_model}")
+			response = self.llm_model.invoke(f"search for more information about {','.join([res for res in messages[0]])} and make sure to {self.message_to_model}")
 		else:
 			response = self.llm_model.invoke(messages)
 		return {"messages": response}
 	
-	def should_continue(self, state: MessagesState) -> Literal["tools", "__end__"]:
+	def _should_continue(self, state: MessagesState) -> Literal["tools", "__end__"]:
 		messages = state["messages"]
 		last_message = messages[-1]
 		if last_message.tool_calls:
@@ -365,13 +362,13 @@ class QueryPDFAndSearch(Callable):
 
 	def _configure_graph(self):
 		flow = StateGraph(MessagesState)
-		flow.add_node("rag", self.call_rag)
-		flow.add_node("tools", self.tool_node)
-		flow.add_node("model", self.call_model)
+		flow.add_node("rag", self._call_rag)
+		flow.add_node("tools", self._tool_node)
+		flow.add_node("model", self._call_model)
 
 		flow.add_edge(START, "rag")
 		flow.add_edge("rag", "model")
-		flow.add_conditional_edges("model", self.should_continue)
+		flow.add_conditional_edges("model", self._should_continue)
 		flow.add_edge("tools", "model")
 		self.graph = flow.compile()
 	#	display(Image(self.graph.get_graph().draw_mermaid_png()))
@@ -379,7 +376,6 @@ class QueryPDFAndSearch(Callable):
 	def __call__(self, question: str):
 		print(f'the question is {question}')
 		for chunk in self.graph.stream({"messages":question}):
-			#print(chunk)
 			if "model" in chunk.keys():
 				chunk["model"]["messages"].pretty_print()
 

@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from langchain_community.callbacks import get_openai_callback 
 from flm.documents.agents import ScholarSearch 
 from flm.documents.functions import SchemaFromPDF
-from flm.documents.graphs import SelfRAGSinglePDF 
+from flm.documents.graphs import SelfRAGSinglePDF, QueryPDFAndSearch 
 
 KEYS = '/Users/hamedhaddadi/Documents/ComplexFluidInformatics/builder/fluidllm/flm/configs/keys.env'
 load_dotenv(KEYS)
@@ -64,12 +64,31 @@ def run_pdf_query() -> None:
 			print('Your response was not clear! Finish')
 			go_on = False  
 
+def run_query_pdf_and_search() -> None:
+	"""
+	function to call QueryPDFAndSearch
+		this function first queries a pdf file using RAGs 
+		then performs a Google search for more information about queried points. 
+	Example:
+		searching for raw materials used in an experimental research paper
+	"""
+	pdf = input("Enter the full path and name of the pdf file: \n")
+	question = input("""Enter your question: \n
+		Note that your question better be asked in one sentence and be as precise as possible! Example: What are the raw materials used in this document? \n
+			""")
+	added_message = input(""" Do you have any added message? \n
+					for example: If you are search for raw materials in a document you can add 'give a brief description and find the name of manufacturers and vendors' \n""")
+	query_search = QueryPDFAndSearch(pdf, added_message= added_message)
+	query_search(question)
+	
+
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description = 'reads command line of modules to run')
 	parser.add_argument('appnames', nargs = '*', type = str, help = 'names of apps to run')
 	apps = parser.parse_args().appnames 
 	for app in apps:
 		{'schema_from_pdf': run_schema_from_pdf, 
-				'query_pdf': run_pdf_query}[app]()
+				'query_pdf': run_pdf_query, 
+					'query_pdf_and_search': run_query_pdf_and_search}[app]()
 		
 

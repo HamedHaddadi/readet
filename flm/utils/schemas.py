@@ -53,5 +53,17 @@ class RawMaterials(BaseModel):
 	"""
 	results: List[str]
 
+class General(BaseModel):
+	"""
+	Information extractor chain uses this schema class
+	to store information from a RAG retrieval.
+	RAG queries a document and stores the retrieved information in this schema.  
+	:param results : names mentioned in the text and retrieved by the RAG
+	:type results : List[str]
+	"""
+	results: List[str]
 
-SCHEMAS = {'suspensions': Suspensions, 'raw_materials': RawMaterials}
+
+SCHEMAS = {'suspensions': Suspensions,
+			'raw_materials': RawMaterials, 
+				'general': General}
