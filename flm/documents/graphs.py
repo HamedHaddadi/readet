@@ -13,7 +13,7 @@ from langgraph.graph import END, START, StateGraph, MessagesState
 from langgraph.prebuilt import ToolNode 
 from pprint import pprint 
 from collections.abc import Callable 
-from typing import Literal, Optional, Dict, Any, List, Union, TypedDict 
+from typing import Literal, Optional, Dict, Any, List, Union, TypedDict, TypeVar  
 from pathlib import Path 
 from IPython.display import Image, display 
 from .. utils import models, prompts 

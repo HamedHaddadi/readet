@@ -78,9 +78,17 @@ QUESTION_REWRITER = """
      		for vectorstore retrieval. Look at the input and try to reason about the underlying semantic intent / meaning.	
 """
 
+# ### Plain Summarizer ### #
+PLAIN_SUMMARY = """
+	you will be provided with unstructured text. Write a concise summary and include the main points.
+		{text}
+"""
+
+
 TEMPLATES = {'suspensions': SUSPENSIONS, 
 					'map-reduce': [MAP, REDUCE], 
 						'schema-rag': SCHEMA_RAG, 
+							'plain-summary': PLAIN_SUMMARY, 
 						'self-rag': {'retrieval-grader':RETRIEVAL_GRADER,
 										'rag': RAG, 
 											'hallucination-grader': HALLUCINATION_GRADER, 

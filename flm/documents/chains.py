@@ -2,7 +2,10 @@
 # module includes chains useful for interaction with documents #
 # ############################################################ #
 
-from typing import Optional, Dict, List, TypeVar, Union  
+from typing import Optional, Dict, List, TypeVar, Union, Any 
+from collections.abc import Callable 
+from os import path, listdir, PathLike 
+from pathlib import Path 
 from langchain_community.document_loaders import PyPDFLoader 
 from langchain_text_splitters import RecursiveCharacterTextSplitter, CharacterTextSplitter 
 from langchain_chroma import Chroma 
@@ -14,10 +17,11 @@ from langchain.chains import MapReduceDocumentsChain, ReduceDocumentsChain
 from langchain.chains.summarize import load_summarize_chain
 from langchain.chains.llm import LLMChain 
 from langchain.chains.combine_documents.stuff import StuffDocumentsChain 
-from collections.abc import Callable 
+from langchain_experimental.graph_transformers import LLMGraphTransformer 
+from langchain_core.documents import Document 
+from langchain_community.graphs import Neo4jGraph 
 from .. utils import prompts, models, docs
 from .. utils.schemas import SCHEMAS 
-
 
 # ################################### #
 # 			      RAGs				  #
@@ -93,6 +97,30 @@ EXTRACTORS = {'plain': extract_schema_plain}
 # ####################################### #
 #  		text summary tools		          #
 # ####################################### #
+# plain text summarizer
+PS = TypeVar('PS', bound = 'PlainSummarizer')
+class PlainSummarizer(Callable):
+	"""
+	generates summary of a text using a simple (prompt | llm) chain
+	it can be instantiated from a pdf file
+	"""
+	def __init__(self, document: List, chat_model: str = 'openai-chat', temperature: int = 0):
+		llm = models.configure_chat_model(chat_model, temperature = temperature)
+		template = prompts.PLAIN_SUMMARY 
+		prompt = PromptTemplate.from_template(template)
+		self.document = document 
+		self.chain = (prompt | llm)
+	
+	def __call__(self) -> str:
+		return self.chain.invoke(self.document).content 
+	
+	@classmethod
+	def from_pdf(cls, pdf: str, chat_model: str = 'oprnai-chat', temperature: int = 0) -> PS:
+		loader = PyPDFLoader(pdf)
+		document = loader.load_and_split()
+		return cls(document, chat_model = chat_model, temperature = temperature)
+
+
 # refine summarizer
 def refine_pdf_summary(pdf_file: str, chat_model: str = 'openai-chat', 
 				temperature = 0) -> str:
@@ -155,6 +183,70 @@ class MapReduceSummary(Callable):
 		
 		return cls(split_docs, chat_model = chat_model,
 					 temperature = temperature, reduce_max_tokens = reduce_max_tokens)
+
+# ################################### #
+# Knowledge Graph Builder			  #
+# ################################### #
+
+KG = TypeVar('KG', bound = 'KnowledgeGraph')
+class KnowledgeGraph(Callable):
+	"""
+	Builds a knowledge graph from a text
+	KnowledgeGraph builder is a chain.
+	"""
+	def __init__(self, summaries: str, store_graph: bool = True, 
+				allowed_nodes: Optional[List[str]] = None,
+					 allowed_relations: Optional[List[str]] = None):
+		self.summaries = summaries 
+		self.store_graph = store_graph 
+		self.allowed_nodes = allowed_nodes 
+		self.allowed_relations = allowed_relations 
+		self.graph = Neo4jGraph()
+		self.graph_doc = None 
+	
+	def _build(self):
+		llm = models.configure_chat_model(model = 'openai-chat', temperature = 0)
+		llm_transformer = LLMGraphTransformer(llm = llm, allowed_nodes = self.allowed_nodes, 
+					allowed_relationships = self.allowed_relations)
+		documents = [Document(self.summaries)]
+		self.graph_doc = llm_transformer.convert_to_graph_documents(documents)
+	
+	@property 
+	def nodes(self) -> List:
+		if self.graph_doc is None:
+			self._build()
+		return self.graph_doc[0].nodes 
+	
+	@property
+	def relations(self) -> List:
+		if self.graph_doc is None:
+			self._build()
+		return self.graph_doc[0].relationships 
+	
+	def __call__(self) -> None:
+		self._build()
+		if self.store_graph:
+			self.graph.add_graph_documents(self.graph_doc)
+
+	@classmethod 
+	def from_pdf(cls, pdf: Union[str, PathLike, List], chat_model: str = 'openai-chat', temperature: int = 0,
+				 store_graph: bool = True,  summarizer: str = 'plain', allowed_nodes: Optional[List[str]] = None, 
+						allowed_relations: Optional[List[str]] = None, **summarizer_kw: Any) -> KG:
+
+		if not isinstance(pdf, (list, tuple)):
+			p = Path(pdf)
+			if p.is_dir():
+				pdf = [path.join(p, pdf_file) for pdf_file in listdir(p) if '.pdf' in pdf_file]
+			elif p.is_file:
+				pdf = [p]
+		
+		print('pdf is: ', pdf)
+		
+		summarize_method = {'plain': PlainSummarizer}[summarizer]
+		summaries = '\n'.join([summarize_method.from_pdf(pdf_file, chat_model = chat_model, 
+								temperature = temperature, **summarizer_kw)() for pdf_file in pdf])
+		return cls(summaries, store_graph = store_graph, allowed_nodes = allowed_nodes, 
+										allowed_relations = allowed_relations)
 		
 		
 		
