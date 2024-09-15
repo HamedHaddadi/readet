@@ -1,3 +1,4 @@
-/flm/configs/keys.env
+/peruse/configs/keys.env
 *.DS_Store
 *.pyc
+*.ipynb

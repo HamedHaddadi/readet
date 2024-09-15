@@ -4,12 +4,11 @@ from datetime import datetime
 import argparse
 from pathlib import Path 
 from dotenv import load_dotenv 
-from langchain_community.callbacks import get_openai_callback 
-from flm.documents.agents import ScholarSearch 
-from flm.documents.functions import SchemaFromPDF
-from flm.documents.graphs import SelfRAGSinglePDF, QueryPDFAndSearch 
+from peruse.core.prebuilt_components import SchemaFromPDF
+from peruse.core.prebuilt_components import QueryPDFAndSearch
+from peruse.core.rags import SelfRAGSinglePDF
 
-KEYS = '/Users/hamedhaddadi/Documents/ComplexFluidInformatics/builder/fluidllm/flm/configs/keys.env'
+KEYS = '/Users/hamedhaddadi/Documents/ComplexFluidInformatics/builder/fluidllm/peruse/configs/keys.env'
 load_dotenv(KEYS)
 
 def make_dir(module_name):
@@ -20,12 +19,7 @@ def make_dir(module_name):
 
 # this function does not work due to an error in langchain_core.pydantic_v1 
 def run_scholar_search() -> None:
-	output_dir = make_dir('scholar_search')
-	num_inputs = input("Enter the number of articles to search: ")
-	scholar = ScholarSearch(num_results = num_inputs)
-	query = input(""" enter your question:
-	 				For example: search all articles that are helpful in understanding fluid flow : \n""")
-	scholar(query, output_dir)
+	pass 
 
 def run_schema_from_pdf() -> None:
 	schemas = input("Enter the Schema name; it must already be available in utils/schemas: ")

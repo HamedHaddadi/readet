@@ -80,7 +80,7 @@ QUESTION_REWRITER = """
 
 # ### Plain Summarizer ### #
 PLAIN_SUMMARY = """
-	you will be provided with unstructured text. Write a concise summary and include the main points.
+	you will be provided with a text. Write a concise summary and include the main points.
 		{text}
 """
 
