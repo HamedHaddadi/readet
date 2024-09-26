@@ -2,12 +2,17 @@
 # custom tools for interacting with documents #
 # ########################################### #
 import os
+from time import time 
 from os import path, makedirs, listdir
+from functools import wraps 
 from tqdm import tqdm   
 from serpapi import Client 
+from semanticscholar import SemanticScholar 
 from langchain.pydantic_v1 import BaseModel, Field, root_validator
 from langchain_core.tools import BaseTool, tool  
-from typing import Optional, Any, Dict, Union  
+from langchain_core.retrievers import BaseRetriever 
+from langchain_core.prompts import BasePromptTemplate, PromptTemplate, format_document  
+from typing import Optional, Any, Dict, Union, List   
 from urllib.request import urlretrieve  
 from . summarizers import PlainSummarizer
 
@@ -157,6 +162,63 @@ class GooglePatentTool(BaseTool):
 		"""
 		return self.api_wrapper.run(query)
 
+# ####### Semantic Scholar Custom Tool ####### #
+class SemanticSearch(BaseModel):
+	"""
+	Wrapper for Semantic Scholar Search with custom outputs. 
+	Attributes:
+		limit: total number of papers to download 
+		timeout: the number of seconds to wait for retrieving a fields from Paper class after semantic search
+		semantic_search_engine: An sinstance of SemanticScholar class 
+		fields: List of fields to retrieve by semantic search 
+	"""
+	limit: int = 20 
+	timeout: int = 10 
+	semantic_search_engine: Any 
+	fields: List = ["title", "abstract", "venue", "year", 
+						"citationCount", "openAccessPdf", 
+							"authors", "externalIds"]
+
+	@root_validator(pre = True)
+	def validate_engine(cls, values:Dict) -> Dict:
+		try:
+			engine = SemanticScholar(timeout = 20)
+		except:
+			raise Exception("can not instantiate SemanticScholarClass")
+		values["semantic_search_engine"] = engine 
+		return values 
+	
+	def timelimit(func):
+		start_time = time.time()
+		def wrapper(self, *args, **kwargs):
+			if time.time() - start_time < self.timeout:
+				return func(*args, **kwargs)
+			else:
+				print("Timeout exceeds for this loop")
+		return wrapper 
+	
+	def retrieve_results(self, results: Any) -> Dict[str, str]:
+		retrieved_items = {key:[] if key != "externalIds" else "DOI" for key in self.fields}
+		try:
+			for item in results:
+				for field in self.fields:
+					if field == 'authors':
+						retrieved_items["authors"].append([auth.get("name") for auth in item["authors"]])
+					elif field == "externalIds":
+						retrieved_items["DOI"].append(item["externalIds"].get("DOI", "Not Available"))
+					else:
+						retrieved_items[field].append(item[field])
+		except:
+			pass 
+		return retrieved_items 
+				
+	def run(self, query: str) -> str:
+		results = self.semantic_search_engine.search_paper(query = query, limit = self.limit, fields = self.fields)
+		retrieved_items = self.retrieve_results(results)
+		return "**********\n\n".join([f"{key} : {value} \n" for key,value in retrieved_items.items()])
+
+
+
 # #### utilities for downloading pdf files #### #
 class PDFDownload(BaseModel):
 	"""
@@ -216,8 +278,28 @@ class PDFSummaryTool(BaseTool):
 					f.write(summary)
 					f.write("\n")
 					f.write('******* . ******* \n')
-	
 
+# ########### Retriever Tool ############## #
+class RetrieverRunnable(BaseModel):
+	"""
+	Takes a retriever as an attribute and invokes a query on the retriever
+	"""
+	retriever: BaseRetriever
+	prompt: BasePromptTemplate = PromptTemplate.from_template("{page_content}")
+	def run(self, query: str) -> str:
+		docs = self.retriever.invoke(query)
+		return "\n\n".join(format_document(doc, self.prompt) for doc in docs)
+
+class RetrieverTool(BaseTool):
+	name: str = "retriever_tool"
+	description: str = """retriever tool which is used to retriever documents from a 
+				vector store. """
+	retriever: RetrieverRunnable 
+
+	def _run(self, query: str) -> str:
+		return self.retriever.run(query)
+
+	
 # #### The following tools are useful when Args need not to be passed an instantiation #### #
 @tool 
 def download_file(url: str, save_path: str, name: str) -> str:

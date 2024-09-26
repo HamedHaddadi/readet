@@ -6,7 +6,9 @@ OPENAI_EMBEDDING = 'text-embedding-3-large'
 
 def configure_chat_model(model, **model_kw):
 	if model == 'openai-chat':
-		return ChatOpenAI(model = OPENAI_CHAT, temperature = model_kw['temperature'])
+		temperature = model_kw.get("temperature", 0)
+		del model_kw["temperature"]
+		return ChatOpenAI(model = OPENAI_CHAT, temperature = temperature, **model_kw)
 
 def configure_embedding_model(model, **model_kw):
 	if model == 'openai-embedding':

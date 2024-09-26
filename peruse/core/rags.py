@@ -2,26 +2,32 @@
 # All RAGS and query systems		#
 # ################################# #
 
-from typing import Optional, Dict, List, Union, Any, TypedDict
-from langchain_community.document_loaders import PyPDFLoader 
+from tempfile import template
+from typing import (Optional, Dict, List,Union, Any, TypedDict, Annotated, Sequence, Literal)
+from urllib import response  
+from langchain_community.document_loaders import PyPDFLoader, pdf  
 from langchain_text_splitters import RecursiveCharacterTextSplitter 
-from langchain_chroma import Chroma 
+from langchain_chroma import Chroma
+from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate  
 from langchain_core.runnables.base import RunnableSequence 
 from langchain_core.runnables import RunnablePassthrough 
 from langchain_core.output_parsers import StrOutputParser 
 from langchain_core.pydantic_v1 import BaseModel, Field 
 from langgraph.graph import END, START, StateGraph
+from langgraph.prebuilt import ToolNode, tools_condition 
+from langgraph.graph.message import add_messages 
 from pprint import pprint 
 from collections.abc import Callable 
 from pathlib import Path 
+from . tools import RetrieverRunnable, RetrieverTool
 from .. utils import prompts, models, docs
 from .. utils.schemas import SCHEMAS 
 
 # ################################### #
 # 			      RAGs				  #
 # ################################### #
-class RAGSinglePDF:
+class RAGPDF:
 	"""
 	vanilla RAG for single PDF files
 	returns a runnbale chain of ({retriever, question} | prompt | llm | parser)
@@ -120,57 +126,55 @@ class GraphState(TypedDict):
     generation: str
     answers: List[str]
 
-class SelfRAGSinglePDF(Callable):
+class SelfRAGPDF:
 	"""
 	self-RAG graph with retrieve, grading and query corection nodes
 	This class is used to query a single pdf file 
 	Class can be used to query a pdf file using any question. It is also possible to use this class
-		to extract structured information using schemas 
+		to extract structured information using schemas.
+	There are three main methods:
+		build(self): which builds the graph
+		run(self): whicb runs the graph
 	"""
 	RECURSION_LIMIT = 40
 	def __init__(self, pdf_file: str, chunk_size: int = 4000,
 	 				chunk_overlap: int = 150,
 					 	 chat_model: str = 'openai-chat', 
-						  	embedding_model: str = 'openai-embedding',
-								  	replacements: Optional[Dict[str, str]] = None):
+						  	embedding_model: str = 'openai-embedding'):
 
+		
 		self.retrieval_grader = None 
 		self.hallucination_grader = None 
 		self.answer_grader = None 
 		self.question_rewriter = None 
 		self.rag_chain = None 
 		self.retriever = None 
-		self.graph = None 
+		self.graph = None
+
+		self.chat_model = chat_model 
+		self.embedding_model = embedding_model  
 
 		self.splitter = RecursiveCharacterTextSplitter(chunk_size = chunk_size,
 						 chunk_overlap = chunk_overlap, add_start_index = True, 
 						 		separators = ["\n\n", "\n", "(?<=\. )", " ", ""])
 		self.split_docs = pdf_file 
-
-		self._configure_retrieval_grader(chat_model = chat_model, embedding_model = embedding_model)
-		self._configure_rag_chain(chat_model = chat_model)
-		self._configure_hallucination_grader(chat_model = chat_model)
-		self._configure_answer_grader(chat_model = chat_model)
-		self._configure_question_rewriter(chat_model = chat_model)
-		self._configure_graph()
 	
-
 	def __setattr__(self, name: str, value: Any) -> None:
 		if name == 'split_docs':
 			if Path(value).exists() and Path(value).is_file() and '.pdf' in value:
 				loader = PyPDFLoader(value)
 				docs = self.splitter.split_documents(loader.load())
-				super(SelfRAGSinglePDF, self).__setattr__(name, docs)
+				super(SelfRAGPDF, self).__setattr__(name, docs)
 		else:
-			super(SelfRAGSinglePDF, self).__setattr__(name, value)	
+			super(SelfRAGPDF, self).__setattr__(name, value)
 
-	
-	def _configure_retrieval_grader(self, chat_model: str = 'openai-chat',
-		 					embedding_model: str = 'openai-embedding') -> None:
+	def _configure_retriever(self) -> None:
 		vectorstore = Chroma.from_documents(documents = self.split_docs, collection_name = "rag-chroma", 
-							embedding = models.configure_embedding_model(embedding_model))
-		self.retriever = vectorstore.as_retriever()
-		llm = models.configure_chat_model(chat_model, temperature = 0)
+							embedding = models.configure_embedding_model(self.embedding_model))
+		self.retriever = vectorstore.as_retriever()		
+
+	def _configure_grader(self) -> None:
+		llm = models.configure_chat_model(self.chat_model, temperature = 0)
 		struct_llm_grader = llm.with_structured_output(GradeRetrieval)
 		system = prompts.TEMPLATES['self-rag']['retrieval-grader']
 		grade_prompt = ChatPromptTemplate.from_messages(
@@ -181,14 +185,14 @@ class SelfRAGSinglePDF(Callable):
 				)
 		self.retrieval_grader = grade_prompt | struct_llm_grader 
 	
-	def _configure_rag_chain(self, chat_model: str = 'openai-chat') -> None:
-		llm = models.configure_chat_model(chat_model, temperature = 0)
+	def _configure_rag_chain(self) -> None:
+		llm = models.configure_chat_model(self.chat_model, temperature = 0)
 		template = prompts.TEMPLATES['self-rag']['rag']
 		prompt = ChatPromptTemplate.from_template(template)
 		self.rag_chain = prompt | llm | StrOutputParser()
 	
-	def _configure_hallucination_grader(self, chat_model: str = 'openai-chat') -> None:
-		llm = models.configure_chat_model(chat_model, temperature = 0)
+	def _configure_hallucination_grader(self) -> None:
+		llm = models.configure_chat_model(self.chat_model, temperature = 0)
 		struct_llm_grader = llm.with_structured_output(GradeHallucinations)
 		system  = prompts.TEMPLATES['self-rag']['hallucination-grader']
 		hallucination_prompt = ChatPromptTemplate.from_messages(
@@ -198,8 +202,8 @@ class SelfRAGSinglePDF(Callable):
 			])
 		self.hallucination_grader = hallucination_prompt | struct_llm_grader
 	
-	def _configure_answer_grader(self, chat_model: str = 'openai-chat') -> None:
-		llm = models.configure_chat_model(chat_model, temperature = 0)
+	def _configure_answer_grader(self) -> None:
+		llm = models.configure_chat_model(self.chat_model, temperature = 0)
 		struct_llm_grader = llm.with_structured_output(GraderAnswer)
 		system = prompts.TEMPLATES['self-rag']['answer-grader']
 		answer_prompt = ChatPromptTemplate.from_messages(
@@ -210,8 +214,8 @@ class SelfRAGSinglePDF(Callable):
 		)
 		self.answer_grader = answer_prompt | struct_llm_grader 
 	
-	def _configure_question_rewriter(self, chat_model: str = 'chat-openai') -> None:
-		llm = models.configure_chat_model(chat_model, temperature = 0)
+	def _configure_question_rewriter(self) -> None:
+		llm = models.configure_chat_model(self.chat_model, temperature = 0)
 		system = prompts.TEMPLATES['self-rag']['question-rewriter']
 		rewrite_prompt = ChatPromptTemplate.from_messages(
 			[
@@ -337,9 +341,17 @@ class SelfRAGSinglePDF(Callable):
 				return "not useful"
 		else:
 			print("DECISION: GENERATION IS NOT GROUNDED IN ANSWERS, RETRY! ")
-			return "not supported" 
+			return "not supported"
+
+	def configure(self) -> None:
+		self._configure_retriever() 
+		self._configure_grader()
+		self._configure_rag_chain()
+		self._configure_hallucination_grader()
+		self._configure_answer_grader() 
+		self._configure_question_rewriter() 
 	
-	def _configure_graph(self) -> None:
+	def build(self) -> None:
 		flow = StateGraph(GraphState)
 		flow.add_node("retrieve", self.retrieve)
 		flow.add_node("grade_answers", self.grader_answers)
@@ -360,7 +372,7 @@ class SelfRAGSinglePDF(Callable):
 				"not useful": "transform_query",},)
 		self.graph = flow.compile()
 	
-	def __call__(self, question: str) -> str:
+	def run(self, question: str) -> str:
 		inputs = {"question": question}
 		for output in self.graph.stream(inputs, {"recursion_limit": self.RECURSION_LIMIT}):
 			for key,value in output.items():
@@ -368,9 +380,186 @@ class SelfRAGSinglePDF(Callable):
 			pprint("*****")
 		pprint(value["generation"])
 
+# ##########################################  #
+# Agentic RAG							      #
+# an llm is used as an agent to decide		  # 
+# between rewriting query or final generation #
+#  ########################################### #
 
-RAGS = {'single-pdf': RAGSinglePDF, 
-			'self-single-pdf': SelfRAGSinglePDF}
+class AgentState(TypedDict):
+	"""
+	state of the graph which is a sequence of instances of BaseMessage types
+	"""
+	messages: Annotated[Sequence[BaseMessage], add_messages]
+
+class RelevanceGrader(BaseModel):
+	"""
+	binary score for relevance check of retrieved document
+	"""
+	binary_score: str = Field(description = "Relevance score which can be either 'yes' or 'no' " )
+
+class AgenticRAG:
+	"""
+	agentic RAG that runs a RAG on asingle pdf file. 
+	"""
+	def __init__(self, pdf_file: str, chunk_size: int = 2000, 
+						chunk_overlap: int = 150, 
+								chat_model: str = "openai-chat", 
+									embedding_model: str = "openai-embedding"):
+		self.retriever = None 
+		self.retriever_tool = None 
+		self.relevance_chain = None 
+		self.generate_chain = None 
+
+		self.graph = None 
+		self.configured = False 
+
+		self.chat_model = chat_model 
+		self.embedding_model = embedding_model 
+
+		self.splitter = RecursiveCharacterTextSplitter(chunk_size = chunk_size,
+						 chunk_overlap = chunk_overlap, add_start_index = True)
+
+		self.split_docs = pdf_file 
+
+	def __setattr__(self, name: str, value: Any) -> None:
+		if name == 'split_docs':
+			value_path = Path(value)
+			if value_path.exists() and value_path.is_file() and '.pdf' in value:
+				pages = pdf.PyMuPDFLoader(value, extract_images = True)
+				if pages is not None:
+					pages = pages.load()
+					pages = self.splitter.split_documents(pages)
+				super(AgenticRAG, self).__setattr__(name, pages)
+			else:
+				raise FileExistsError(f"pdf file {value} does not exist")
+		else:
+			super(AgenticRAG, self).__setattr__(name, value)
+	
+	def _configure_retriever(self) -> None:
+		vectorstore = Chroma.from_documents(documents = self.split_docs, collection_name = "rag-chroma", 
+								embedding = models.configure_embedding_model(self.embedding_model)) 
+		self.retriever = vectorstore.as_retriever()
+	
+	def _configure_retriever_tool(self) -> None:
+		self.retriever_tool = RetrieverTool(retriever = RetrieverRunnable(retriever = self.retriever))
+
+	def _configure_relevance_check_chain(self) -> None:
+		llm = models.configure_chat_model(self.chat_model, temperature = 0)
+		model_with_struct = llm.with_structured_output(RelevanceGrader)
+		template = prompts.TEMPLATES['agentic-rag']['relevance-grader']
+		prompt = PromptTemplate.from_template(template)
+		self.relevance_chain = (prompt | model_with_struct)
+	
+	def _configure_generate_chain(self) -> None:
+		template = prompts.TEMPLATES["rag"]
+		prompt = PromptTemplate.from_template(template)
+		llm = models.configure_chat_model(self.chat_model, temperature = 0, streaming = True)
+		self.generate_chain = prompt | llm | StrOutputParser()
+
+	# methods that will be used as graph nodes 
+	def _check_relevance(self, state: AgentState) -> Literal["generate", "rewrite"]:
+		"""
+    	determines whether the retrieved documents are relevant to the question
+    	Args:
+     	   state (messages): the current state 
+    	Returns:
+    	    std: A decision for whether the document is relevant (generate) or not (rewrite)		
+		"""
+		messages = state["messages"]
+		last_message = messages[-1]
+		question = messages[0].content 
+		context = last_message.content 
+
+		score = self.relevance_chain.invoke({"question": question, "context": context}).binary_score 
+		if score == "yes":
+			print(">>> Retrieved relevant document <<<")
+			return "generate"
+		elif score == "no":
+			print(">>> Did not retrieve relevant document <<<")
+			return "rewrite"
+	
+	def _agent(self, state: AgentState) -> Dict[Literal["messages"], Sequence[BaseMessage]]:
+		"""
+    	Invokes the agent model to generate a response based on the current state. Given
+    	the question, it will decide to retrieve using the retriever tool, or simply end.
+    	Args:
+        	state (messages): The current state
+    	Returns:
+        	dict: The updated state with the agent response appended to messages
+		"""
+		messages = state["messages"]
+		llm = models.configure_chat_model(self.chat_model, temperature = 0)
+		llm_with_tools = llm.bind_tools([self.retriever_tool])
+		response = llm_with_tools.invoke(messages)
+		return {"messages": [response]}
+	
+	def _rewrite(self, state: AgentState) -> Dict[Literal["messages"], Sequence[BaseMessage]]:
+		"""
+    	Transform the query to produce a better question.
+    	Args:
+    	    state (messages): The current state
+    	Returns:
+    	    dict: The updated state with re-phrased question	
+		"""
+		messages = state["messages"]
+		question = messages[0].content 
+		msg = [HumanMessage(content = f""" \n  Look at the input and try
+				 to reason about the underlying semantic intent / meaning. \n 
+                Here is the initial question:
+                \n ------- \n
+                {question} 
+            \n ------- \n
+            Formulate an improved question:""")]
+		llm = models.configure_chat_model(self.chat_model, temperature = 0, streaming = True)
+		response = llm.invoke(msg)
+		return {"messages": [response]}
+	
+	def _generate(self, state: AgentState) -> Dict[Literal["messages"], Sequence[BaseMessage]]:
+		"""
+		Generate Answer:
+			Args:
+				state (messages): the current state 
+			Returns:
+				dict: The updated state with re-phrased question
+		"""
+		messages = state["messages"]
+		question = messages[0].content 
+		last_message = messages[-1]
+		context = last_message.content 
+		response = self.generate_chain.invoke({"context": context, "question": question})
+		return {"messages": [response]}
+	
+	def configure(self) -> None:
+		self._configure_retriever()
+		self._configure_retriever_tool()
+		self._configure_relevance_check_chain()
+		self._configure_generate_chain()
+		self.configured = True 
+
+	def build(self) -> None:
+
+		if not self.configured:
+			self.configure()
+
+		flow = StateGraph(AgentState)
+		flow.add_node("agent", self._agent)
+		flow.add_node("rewrite", self._rewrite)
+		flow.add_node("generate", self._generate)
+		retriever_node = ToolNode([self.retriever_tool])
+		flow.add_node("retrieve", retriever_node)
+
+		flow.add_edge(START, "agent")
+		flow.add_conditional_edges("agent", tools_condition, {"tools": "retrieve", END: END})
+		flow.add_conditional_edges("retrieve", self._check_relevance)
+		flow.add_edge("generate", END)
+		flow.add_edge("rewrite", "agent")
+		self.graph = flow.compile()
+
+
+# ##################################### #
+RAGS = {'single-pdf': RAGPDF, 
+			'self-single-pdf': SelfRAGPDF}
 
 EXTRACTORS = {'plain': extract_schema_plain}
 

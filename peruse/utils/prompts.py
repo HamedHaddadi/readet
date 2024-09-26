@@ -58,7 +58,7 @@ RAG = """
 	You are an assistant for question-answering tasks. 
 		Use the following pieces of retrieved context to answer the question.
 		 If you don't know the answer, just say that you don't know. 
-		 	Use two sentences maximum and keep the answer concise.
+		 	Use three sentences maximum and keep the answer concise.
 	Question: {question} 
 	Context: {context} 
 	Answer:
@@ -84,15 +84,26 @@ PLAIN_SUMMARY = """
 		{text}
 """
 
+# ### Agentic RAG #### #
+RELEVANCE_GRADER = """
+        You are a grader assessing relevance of a retrieved document to a user question. \n 
+        Here is the retrieved document: \n\n {context} \n\n
+        Here is the user question: {question} \n
+        If the document contains keyword(s) or semantic meaning related to the user question, grade it as relevant. \n
+        Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question.	
+"""
+
 
 TEMPLATES = {'suspensions': SUSPENSIONS, 
 					'map-reduce': [MAP, REDUCE], 
 						'schema-rag': SCHEMA_RAG, 
+							'rag': RAG, 
 							'plain-summary': PLAIN_SUMMARY, 
 						'self-rag': {'retrieval-grader':RETRIEVAL_GRADER,
 										'rag': RAG, 
 											'hallucination-grader': HALLUCINATION_GRADER, 
 												'answer-grader': ANSWER_GRADER, 
-													'question-rewriter': QUESTION_REWRITER}}
+													'question-rewriter': QUESTION_REWRITER}, 
+						'agentic-rag': {'relevance-grader': RELEVANCE_GRADER}}
 
 

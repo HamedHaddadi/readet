@@ -123,17 +123,22 @@ Assist = TypeVar('Assist', bound = "Assistant")
 class Assistant(Callable):
 	"""
 	Assistant class 
+	runnable: can be a compiled graph or a chain or agent 
+	thread: integer; id of a thread for adding memory to the conversation
 	"""
-	def __init__(self, runnable: Runnable):
+	def __init__(self, runnable: Runnable, thread: int = 1):
 		self.runnable = runnable 
+		self.thread = thread 
 	
 	def _run_chat_mode(self):
+		config = {"configurable": {"thread_id": "1"}}
 		while True:
 			user_input = input("User: ")
 			if user_input.lower() in ["quit", "exit", "q"]:
 				print("Ciao!")
 				break 
-			for event in self.runnable.stream({"messages":[("user", user_input)]}):
+			for event in self.runnable.stream({"messages":[("user", user_input)]}, 
+						config, stream_mode = "values"):
 				for value in event.values():
 					if isinstance(value["messages"][-1], BaseMessage):
 						if value["messages"][-1].content == "":
@@ -151,8 +156,8 @@ class Assistant(Callable):
 			self._run_QA_mode()
 	
 	@classmethod
-	def from_graph(cls, graph: CompiledGraph) -> Assist:
-		return cls(graph)
+	def from_graph(cls, graph: CompiledGraph, thread: int = 1) -> Assist:
+		return cls(graph, thread = thread)
 
 
 

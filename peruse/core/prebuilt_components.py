@@ -158,10 +158,6 @@ class SchemaFromPDF(Callable):
 		args = callable.__code__.co_varnames[:callable.__code__.co_argcount]
 		return [arg for arg in args if arg not in ['self', 'cls']]
 
-# ################################ #
-# scholar search agent			   #
-# ################################ #
-
 
 
 
