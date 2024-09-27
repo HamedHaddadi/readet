@@ -16,6 +16,7 @@ from langchain_core.runnables import RunnableLambda, Runnable
 from langchain_core.tools import BaseTool   
 from langgraph.prebuilt import ToolNode 
 from langgraph.graph.graph import CompiledGraph 
+from langgraph.checkpoint.memory import MemorySaver 
 from collections.abc import Callable 
 
  
@@ -53,7 +54,8 @@ class AgentState(TypedDict):
 	is_last_step: IsLastStep
 
 def create_react_graph(tools: Union[Sequence[BaseTool], BaseTool], agent_use: str,  model: Optional[LanguageModelLike] = None, 
-				tool_error_handling: bool = True,  chat_model: str = 'openai-chat') -> CompiledGraph:
+				tool_error_handling: bool = True,  chat_model: str = 'openai-chat', 
+						compile: bool = True) -> Union[StateGraph, CompiledGraph]:
 	"""
 	Creates a graph that works with a LLM for performing tool calling. 
 	This function is similar to langgraph create_react_agent 
@@ -114,10 +116,11 @@ def create_react_graph(tools: Union[Sequence[BaseTool], BaseTool], agent_use: st
 									{"tools": "tools", "end": END})
 	workflow.add_edge("tools", "model")
 	workflow.add_edge(START, "model")
-	graph = workflow.compile()
-	return graph
-
-
+	if compile:
+		return workflow.compile()
+	else:
+		return workflow 
+	
 # General assistante class to run a graph 
 Assist = TypeVar('Assist', bound = "Assistant")
 class Assistant(Callable):
@@ -126,19 +129,22 @@ class Assistant(Callable):
 	runnable: can be a compiled graph or a chain or agent 
 	thread: integer; id of a thread for adding memory to the conversation
 	"""
-	def __init__(self, runnable: Runnable, thread: int = 1):
-		self.runnable = runnable 
+	def __init__(self, runnable: Runnable, thread: int = 1, memory: Optional[Literal["device"]] = None):
+		memory = {'device': MemorySaver(), None: None}[memory]
+		self.config = None 
+		if memory is not None:
+			self.config = {"configurable": {"thread_id": "1"}}
+		self.runnable = runnable.compile(checkpointer = memory) 
 		self.thread = thread 
 	
 	def _run_chat_mode(self):
-		config = {"configurable": {"thread_id": "1"}}
 		while True:
 			user_input = input("User: ")
 			if user_input.lower() in ["quit", "exit", "q"]:
 				print("Ciao!")
 				break 
 			for event in self.runnable.stream({"messages":[("user", user_input)]}, 
-						config, stream_mode = "values"):
+						self.config, stream_mode = "values"):
 				for value in event.values():
 					if isinstance(value["messages"][-1], BaseMessage):
 						if value["messages"][-1].content == "":
@@ -156,7 +162,10 @@ class Assistant(Callable):
 			self._run_QA_mode()
 	
 	@classmethod
-	def from_graph(cls, graph: CompiledGraph, thread: int = 1) -> Assist:
+	def from_graph(cls, graph: StateGraph, thread: int = 1) -> Assist:
+		"""
+		accept an uncompiled graph as input
+		"""
 		return cls(graph, thread = thread)
 
 

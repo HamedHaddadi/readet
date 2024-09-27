@@ -2,9 +2,8 @@
 # All RAGS and query systems		#
 # ################################# #
 
-from tempfile import template
+import pprint 
 from typing import (Optional, Dict, List,Union, Any, TypedDict, Annotated, Sequence, Literal)
-from urllib import response  
 from langchain_community.document_loaders import PyPDFLoader, pdf  
 from langchain_text_splitters import RecursiveCharacterTextSplitter 
 from langchain_chroma import Chroma
@@ -18,7 +17,6 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition 
 from langgraph.graph.message import add_messages 
 from pprint import pprint 
-from collections.abc import Callable 
 from pathlib import Path 
 from . tools import RetrieverRunnable, RetrieverTool
 from .. utils import prompts, models, docs
@@ -555,11 +553,32 @@ class AgenticRAG:
 		flow.add_edge("generate", END)
 		flow.add_edge("rewrite", "agent")
 		self.graph = flow.compile()
-
+	
+	# run methods 
+	def _run_stream(self, query: str):
+		inputs = {"messages": [("user", query)]}
+		for output in self.graph.stream(inputs, stream_mode = 'updates'):
+			for key, value in output.items():
+				pprint.pprint(f"Output from node '{key}':")
+				pprint.pprint(" >>> <<<")
+				pprint.pprint(value, indent=2, width=80, depth=None)
+				pprint.pprint("\n---\n")
+	
+	def _run(self, query: str) -> str:
+		inputs = {"messages": [(query),]}
+		output = self.graph.invoke(inputs, stream_mode= "values")
+		return output["messages"][-1].content 
+	
+	def run(self, query: str, stream: bool = False) -> Union[str, None]:
+		if stream:
+			return self._run(query)
+		else:
+			self._run_stream(query)
 
 # ##################################### #
 RAGS = {'single-pdf': RAGPDF, 
-			'self-single-pdf': SelfRAGPDF}
+			'self-single-pdf': SelfRAGPDF, 
+				'agentic-rag-pdf': AgenticRAG}
 
 EXTRACTORS = {'plain': extract_schema_plain}
 

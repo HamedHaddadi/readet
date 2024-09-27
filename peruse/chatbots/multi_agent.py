@@ -1,13 +1,10 @@
 # ########################### #
 # Multi-agent systems         #
 # ########################### #
-from typing import Annotated, Sequence, Dict, TypeVar, Literal, TypedDict
-from urllib import response   
-from pydantic import BaseModel 
-from collections.abc import Callable
+from typing import Annotated, Sequence, Dict, TypedDict, Union
 from functools import partial  
 
-from langchain_core.messages import HumanMessage, BaseMessage, AIMessage 
+from langchain_core.messages import HumanMessage, BaseMessage 
 from langchain_core.tools import BaseTool 
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder 
 
@@ -36,6 +33,7 @@ class Supervisor:
 	"""
 	def __init__(self, agents: Dict[str, Sequence[BaseTool]], model: str = 'openai-chat'):
 		self.agents = agents 
+		self._compiled = False  
 		self.llm = models.configure_chat_model(model, temperature = 0)
 
 		self.agent_names = list(self.agents.keys())
@@ -62,30 +60,43 @@ class Supervisor:
 			[("system", system_prompt1), MessagesPlaceholder(variable_name = "messages"), 
 				("system", system_prompt2)]).partial(options = str(self.options),
 						 agent_names = ', '.join(self.agent_names))
+	
+	@property 
+	def compiled(self):
+		return self._compiled 
+	
+	@compiled.setter 
+	def compiled(self, status: bool):
+		if self._compiled is False and status is True:
+			self._compiled = True 
 		
-	def supervisor_agent(self, state):
+	def _supervisor_agent(self, state):
 		chain = (self.supervisor_prompt | self.llm.with_structured_output(self.router_schema))
 		return chain.invoke(state)
 
 	@staticmethod
-	def agent_node(state, agent: CompiledGraph, name: str) -> Dict:
+	def _agent_node(state, agent: CompiledGraph, name: str) -> Dict:
 		result = agent.invoke(state)
 		return {"messages": [HumanMessage(content = result["messages"][-1].content, name = name)]}
 	
-	def build(self) -> CompiledGraph:
+	def build(self, compile = True) -> Union[CompiledGraph, StateGraph]:
 		workflow = StateGraph(AgentState)
 		for agent_name, tools in self.agents.items():
 			setattr(self, agent_name, create_react_graph(tools, agent_name, self.llm))
-			node = partial(self.agent_node, agent = getattr(self, agent_name), name = agent_name)
+			node = partial(self._agent_node, agent = getattr(self, agent_name), name = agent_name)
 			workflow.add_node(agent_name, node)
-		workflow.add_node("supervisor", self.supervisor_agent)
+		workflow.add_node("supervisor", self._supervisor_agent)
 		for agent in self.agents:
 			workflow.add_edge(agent, "supervisor")
 		conditional_map = {k: k for k in self.agent_names}
 		conditional_map["FINISH"] = END 
 		workflow.add_conditional_edges("supervisor", lambda x: x['next'], conditional_map)
 		workflow.add_edge(START, "supervisor")
-		self.graph = workflow.compile()
+		if compile:
+			self.graph = workflow.compile()
+			self.compiled = True  
+		else:
+			self.graph = workflow
 		return self.graph 
 	
 	
