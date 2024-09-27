@@ -1,8 +1,6 @@
 # ################################# #
 # All RAGS and query systems		#
 # ################################# #
-
-import pprint 
 from typing import (Optional, Dict, List,Union, Any, TypedDict, Annotated, Sequence, Literal)
 from langchain_community.document_loaders import PyPDFLoader, pdf  
 from langchain_text_splitters import RecursiveCharacterTextSplitter 
@@ -559,10 +557,10 @@ class AgenticRAG:
 		inputs = {"messages": [("user", query)]}
 		for output in self.graph.stream(inputs, stream_mode = 'updates'):
 			for key, value in output.items():
-				pprint.pprint(f"Output from node '{key}':")
-				pprint.pprint(" >>> <<<")
-				pprint.pprint(value, indent=2, width=80, depth=None)
-				pprint.pprint("\n---\n")
+				pprint(f"Output from node '{key}':")
+				pprint(" >>> <<<")
+				pprint(value, indent=2, width=80, depth=None)
+				pprint("\n---\n")
 	
 	def _run(self, query: str) -> str:
 		inputs = {"messages": [(query),]}
@@ -570,7 +568,7 @@ class AgenticRAG:
 		return output["messages"][-1].content 
 	
 	def run(self, query: str, stream: bool = False) -> Union[str, None]:
-		if stream:
+		if not stream:
 			return self._run(query)
 		else:
 			self._run_stream(query)
