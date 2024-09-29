@@ -408,7 +408,8 @@ class AgenticRAG:
 		self.generate_chain = None 
 
 		self.graph = None 
-		self.configured = False 
+		self._configured = False
+		self._built = False  
 
 		self.chat_model = chat_model 
 		self.embedding_model = embedding_model 
@@ -417,7 +418,25 @@ class AgenticRAG:
 						 chunk_overlap = chunk_overlap, add_start_index = True)
 
 		self.split_docs = pdf_file 
-
+	
+	@property 
+	def configured(self):
+		return self._configured 
+	
+	@configured.setter
+	def configured(self, status: bool):
+		if self._configured is False and status is True:
+			self._configured = True 
+	
+	@property
+	def built(self):
+		return self._built 
+	
+	@built.setter
+	def built(self, status: bool):
+		if self._built is False and status is True:
+			self._built = True 
+	
 	def __setattr__(self, name: str, value: Any) -> None:
 		if name == 'split_docs':
 			value_path = Path(value)
@@ -531,11 +550,11 @@ class AgenticRAG:
 		self._configure_retriever_tool()
 		self._configure_relevance_check_chain()
 		self._configure_generate_chain()
-		self.configured = True 
+		self._configured = True 
 
 	def build(self) -> None:
 
-		if not self.configured:
+		if not self._configured:
 			self.configure()
 
 		flow = StateGraph(AgentState)
@@ -551,6 +570,7 @@ class AgenticRAG:
 		flow.add_edge("generate", END)
 		flow.add_edge("rewrite", "agent")
 		self.graph = flow.compile()
+		self._built = True 
 	
 	# run methods 
 	def _run_stream(self, query: str):
@@ -568,6 +588,9 @@ class AgenticRAG:
 		return output["messages"][-1].content 
 	
 	def run(self, query: str, stream: bool = False) -> Union[str, None]:
+		if not self._built:
+			self.build()
+
 		if not stream:
 			return self._run(query)
 		else:

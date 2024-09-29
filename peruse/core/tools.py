@@ -5,7 +5,9 @@ import os
 from time import time 
 from os import path, makedirs, listdir
 from functools import wraps 
-from tqdm import tqdm   
+from tqdm import tqdm 
+from arxiv import Search as ArSearch 
+from arxiv import Client as ArClient    
 from serpapi import Client 
 from semanticscholar import SemanticScholar 
 from langchain.pydantic_v1 import BaseModel, Field, root_validator
@@ -86,6 +88,59 @@ class GoogleScholarTool(BaseTool):
 		Use the tool
 		"""
 		return self.api_wrapper.run(query)
+
+# ############################## #
+# ArXiv Tool					 #
+# ############################## #
+class ArxivSearch(BaseModel):
+	"""
+	Wrapper for Arxiv search tool. 
+	Attributes:
+		page_size: maximum number of results fetched in a single API request
+	max_results:
+		max_results: maximum number of results to be returned in a search execution
+	"""
+	page_size: int = 10
+	max_results: int = 20 
+
+	def run(self, query: str) -> str:
+		client = ArClient(page_size = self.page_size, delay_seconds = 3, num_retries = 3)
+		results = client.results(ArSearch(query, max_results = self.max_results))
+		fetched_data = []
+		for result in results:
+			data = {"title": result.title, 
+						"journal_ref": result.journal_ref, 
+							"DOI": result.doi, 
+								"authors": ",".join([author.name for author in result.authors]), 
+									"pdf_url": result.pdf_url}
+			fetched_data.append(data)
+		
+		papers = [f"""Title: {data.get("title", "None")}\n
+			PDF: {data.get("pdf_url", "None")}\n
+			Authors: {data.get("authors", "None")}\n
+			Journal Reference: {data.get("journal_ref", "None")}\n
+			DOI: {data.get("doi", "None")}\n"""
+			for data in fetched_data]
+
+		return " ************ \n".join(papers)
+
+class ArxivTool(BaseTool):
+	"""
+	Tool that requires ArxivSearch. 
+	"""
+	name: str ="arxiv_tool"
+	description: str = """ A wrapper around ArxivSearch.
+        Useful for when you need to search Arxiv database for manuscripts. 
+		Input should be a string query
+	"""
+	api_wrapper: ArxivSearch 
+
+	def _run(self, query: str) -> str:
+		"""
+		Use the tool
+		"""
+		return self.api_wrapper.run(query)
+
 
 # ## Google Patent Search Tool ## #
 # API call					   ## #	 
@@ -199,6 +254,8 @@ class SemanticSearch(BaseModel):
 	
 	def retrieve_results(self, results: Any) -> Dict[str, str]:
 		retrieved_items = {key:[] if key != "externalIds" else "DOI" for key in self.fields}
+		print("retrieved items are ", retrieved_items)
+		print(f"the length of results are {len(results)}")
 		try:
 			for item in results:
 				for field in self.fields:
@@ -216,7 +273,6 @@ class SemanticSearch(BaseModel):
 		results = self.semantic_search_engine.search_paper(query = query, limit = self.limit, fields = self.fields)
 		retrieved_items = self.retrieve_results(results)
 		return "**********\n\n".join([f"{key} : {value} \n" for key,value in retrieved_items.items()])
-
 
 
 # #### utilities for downloading pdf files #### #
@@ -332,6 +388,7 @@ def summarizer_tool(save_path: str) -> Union[None,str]:
 				f.write("\n")
 	else:
 		return "was not able to summarize"
+
 
 
 
