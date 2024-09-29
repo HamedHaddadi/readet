@@ -122,7 +122,7 @@ class GraphState(TypedDict):
     generation: str
     answers: List[str]
 
-class SelfRAGPDF:
+class SelfRAG:
 	"""
 	self-RAG graph with retrieve, grading and query corection nodes
 	This class is used to query a single pdf file 
@@ -150,19 +150,44 @@ class SelfRAGPDF:
 		self.chat_model = chat_model 
 		self.embedding_model = embedding_model  
 
+		self._configured = False 
+		self._built = False 
+
 		self.splitter = RecursiveCharacterTextSplitter(chunk_size = chunk_size,
 						 chunk_overlap = chunk_overlap, add_start_index = True, 
 						 		separators = ["\n\n", "\n", "(?<=\. )", " ", ""])
 		self.split_docs = pdf_file 
 	
+	@property 
+	def configured(self):
+		return self._configured 
+	
+	@configured.setter 
+	def configured(self, status: bool):
+		if self._configured is False and status is True:
+			self._configured = True 
+
+	@property 
+	def built(self):
+		return self._built 
+
+	@built.setter
+	def built(self, status: bool):
+		if self._built is False and status is True:
+			self._built = True  
+	
 	def __setattr__(self, name: str, value: Any) -> None:
 		if name == 'split_docs':
-			if Path(value).exists() and Path(value).is_file() and '.pdf' in value:
-				loader = PyPDFLoader(value)
-				docs = self.splitter.split_documents(loader.load())
-				super(SelfRAGPDF, self).__setattr__(name, docs)
+			value_path = Path(value)
+			if value_path.exists() and value_path.is_file() and '.pdf' in value:
+				pages = pdf.PyMuPDFLoader(value, extract_images = True)
+				if pages is not None:
+					pages = self.splitter.split_documents(pages.load())
+				super(SelfRAG, self).__setattr__(name, pages)
+			else:
+				raise FileExistsError(f"pdf file {value} does not exist")
 		else:
-			super(SelfRAGPDF, self).__setattr__(name, value)
+			super(SelfRAG, self).__setattr__(name, value)
 
 	def _configure_retriever(self) -> None:
 		vectorstore = Chroma.from_documents(documents = self.split_docs, collection_name = "rag-chroma", 
@@ -346,8 +371,13 @@ class SelfRAGPDF:
 		self._configure_hallucination_grader()
 		self._configure_answer_grader() 
 		self._configure_question_rewriter() 
+		self._configured = True 
 	
 	def build(self) -> None:
+
+		if not self._configured:
+			self.configure()
+
 		flow = StateGraph(GraphState)
 		flow.add_node("retrieve", self.retrieve)
 		flow.add_node("grade_answers", self.grader_answers)
@@ -367,14 +397,26 @@ class SelfRAGPDF:
 			{"not supported": "generate", "useful": END, 
 				"not useful": "transform_query",},)
 		self.graph = flow.compile()
-	
-	def run(self, question: str) -> str:
+		self._built = True 
+
+	def _run(self, question: str) -> str:
+		inputs = {"question": question}
+		outputs = self.graph.invoke(inputs)
+		return outputs["generation"]
+
+	def _run_stream(self, question: str) -> None:
 		inputs = {"question": question}
 		for output in self.graph.stream(inputs, {"recursion_limit": self.RECURSION_LIMIT}):
 			for key,value in output.items():
 				pprint(f"Node '{key}' : ")
 			pprint("*****")
-		pprint(value["generation"])
+		pprint(value["generation"])		
+	
+	def run(self, question: str, stream: bool = False) -> Union[str, None]:
+		if stream:
+			self._run_stream(question)
+		else:
+			return self._run(question)
 
 # ##########################################  #
 # Agentic RAG							      #
@@ -598,7 +640,7 @@ class AgenticRAG:
 
 # ##################################### #
 RAGS = {'single-pdf': RAGPDF, 
-			'self-single-pdf': SelfRAGPDF, 
+			'self-single-pdf': SelfRAG, 
 				'agentic-rag-pdf': AgenticRAG}
 
 EXTRACTORS = {'plain': extract_schema_plain}
