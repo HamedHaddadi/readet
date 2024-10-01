@@ -1,18 +1,21 @@
 # ################################## #
 # Agents built for specific purposes #
 # ################################## #
-from os import path 
-from typing import Dict, Literal, List, Optional, overload   
+from os import path
+from pathlib import Path  
+from typing import Dict, Literal, List, Optional, overload, Sequence   
 import pandas as pd  
 from collections.abc import Callable 
-from langchain_core.pydantic_v1 import BaseModel
+from langchain_core.pydantic_v1 import BaseModel, Field 
+from langchain_core.prompts import PromptTemplate 
 from langchain_community.callbacks import get_openai_callback 
+from langchain_community.document_loaders import pdf 
 from langchain_community.tools.tavily_search import TavilySearchResults 
 from langgraph.prebuilt import ToolNode  
 from langgraph.graph import END, START, StateGraph, MessagesState
 from langchain_core.messages import AIMessage 
 from . import rags 
-from .. utils import models, questions    
+from .. utils import models, questions, prompts    
 
 # ######################################## #
 #  Tavily search on extracted information  #
@@ -158,7 +161,36 @@ class SchemaFromPDF(Callable):
 		args = callable.__code__.co_varnames[:callable.__code__.co_argcount]
 		return [arg for arg in args if arg not in ['self', 'cls']]
 
+# ############ Keyword extraction ############# #
+class Keys(BaseModel):
+	keywords: Sequence[str] = Field(default = [], description = 'list of extracted keywords')
 
-
-
-
+class ExtractKeywords:
+	"""
+	class to extract keywords from a text
+	Returns:
+		a comma separated string of extracted keywords
+	"""
+	
+	def __init__(self, model: str = 'openai-chat'):
+		llm = models.configure_chat_model(model = model, temperature = 0)
+		template = prompts.TEMPLATES['extract-keywords']
+		prompt = PromptTemplate.from_template(template)
+		self.chain = (prompt | llm.with_structured_output(Keys))
+	
+	@staticmethod 
+	def _text_from_pdf(document: str) -> str:
+		doc_path = Path(document)
+		if doc_path.exists() and doc_path.is_file() and '.pdf' in document:
+			pages = pdf.PyMuPDFLoader(document, extract_images = True)
+			if pages is not None:
+				pages = pages.load_and_split()
+				text = '\n'.join([doc.page_content for doc in pages])
+				return text 
+		else:
+			return None 
+	
+	def run(self, document: str) -> str:
+		text = self._text_from_pdf(document)
+		outputs = self.chain.invoke(text)
+		return ','.join(outputs.keywords) 

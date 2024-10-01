@@ -93,6 +93,13 @@ RELEVANCE_GRADER = """
         Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question.	
 """
 
+# ### Keyword extraction from documents ### #
+EXTRACT_KEYWORDS = """
+    you will be provided with a text. try to find keywords in this text. Avoid including name of the assignee, 
+        corporation, or the name of authors or people. Extract keywords that aretechnically relevant
+{text}	
+"""
+
 
 TEMPLATES = {'suspensions': SUSPENSIONS, 
 					'map-reduce': [MAP, REDUCE], 
@@ -104,6 +111,7 @@ TEMPLATES = {'suspensions': SUSPENSIONS,
 											'hallucination-grader': HALLUCINATION_GRADER, 
 												'answer-grader': ANSWER_GRADER, 
 													'question-rewriter': QUESTION_REWRITER}, 
-						'agentic-rag': {'relevance-grader': RELEVANCE_GRADER}}
+						'agentic-rag': {'relevance-grader': RELEVANCE_GRADER}, 
+							'extract-keywords': EXTRACT_KEYWORDS}
 
 

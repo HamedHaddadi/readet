@@ -2,6 +2,7 @@
 # custom tools for interacting with documents #
 # ########################################### #
 import os
+from pydoc import resolve
 from time import time 
 from os import path, makedirs, listdir
 from functools import wraps 
@@ -43,30 +44,53 @@ class ScholarSearch(BaseModel):
 		values["scholar_search_engine"] = client 
 		return values 
 	
+	@staticmethod 
+	def _get_results(results: Optional[Dict] = None) -> Dict[str, str]:
+		parsed_results = {key: None for key in
+				 ["Title", "Authors", "Venue", "Citation Count", "PDF Link"]}
+		parsed_results["Title"] = results.get("title")
+		summary = results["publication_info"]["summary"].split('-')
+		parsed_results["Authors"] = summary[0]
+		parsed_results["Venue"] = summary[1]
+		parsed_results["Citation Count"] = results["inline_links"]["cited_by"]["total"]
+		resources = results.get("resources", None)
+		if resources is not None:
+			if resources[0]["file_format"] == "PDF":
+				parsed_results["PDF Link"] = resources[0]["link"]
+		else:
+			parsed_results["PDF Link"] = "None"
+		return parsed_results 
+	
 	def run(self, query: str) -> str:
 		page = 0
 		all_results = []
 		while page < max((self.top_k_results - 20), 1):
-			results = (self.scholar_search_engine({"engine": "google_scholar"
+			organic_results = (self.scholar_search_engine.search({"engine": "google_scholar"
 						,"q": query, "start": page, "hl": "en",
-                        "num": min( self.top_k_results, 20), "lr": "lang_en"}).get_dict().get("organic_results", []))
-			all_results.extend(results)
-			if not results:  
+                        "num": min( self.top_k_results, 20), "lr": "lang_en"}).get("organic_results", []))
+			for result in organic_results:
+				fields = self._get_results(result)
+				all_results.append(fields)
+			
+			if not organic_results:  
 				break
 			page += 20
 		if (self.top_k_results % 20 != 0 and page > 20 and all_results):  # From the last page we would only need top_k_results%20 results
-			results = (self.search_scholar_engine({"engine":"google_scholar",
+			organic_results = (self.search_scholar_engine.search({"engine":"google_scholar",
 							 "q": query,"start": page,
 					"num": self.top_k_results % 20,
-					 "hl": "en", "lr": "lang_en"}).get_dict().get("organic_results", []))
-			all_results.extend(results)
+					 "hl": "en", "lr": "lang_en"}).get("organic_results", []))
+			for result in organic_results:
+				fields = self._get_results(result)
+				all_results.append(fields)
 		if not all_results:
 			return "No good Google Scholar Result was found"
-		docs = [
-            f"Title: {result.get('title','')}\n"
-            f"Authors: {','.join([author.get('name') for author in result.get('publication_info',{}).get('authors',[])])}\n"  # noqa: E501
-            f"Summary: {result.get('publication_info',{}).get('summary','')}\n"
-            f"Total-Citations: {result.get('inline_links',{}).get('cited_by',{}).get('total','')}"  # noqa: E501
+
+		docs = ["******************* \n"
+            f"Title: {result.get('Title','')}\n"
+            f"Authors: {result.get('Authors')}\n"  # noqa: E501
+            f"Citation Count: {result.get('Citation Count')}\n"
+            f"PDF Link: {result.get('PDF Link')}"  # noqa: E501
             for result in all_results
         ]
 		return "\n\n".join(docs)
