@@ -7,7 +7,6 @@ from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate 
 # langgraph imports
 from langgraph.graph import START, END, StateGraph, add_messages 
-from langgraph.graph.graph import CompiledGraph 
 from langgraph.graph.message import add_messages 
 from langgraph.managed import IsLastStep 
 from langchain_core.language_models import LanguageModelLike 
@@ -130,12 +129,16 @@ class Assistant(Callable):
 	thread: integer; id of a thread for adding memory to the conversation
 	"""
 	def __init__(self, runnable: Runnable, thread: int = 1, memory: Optional[Literal["device"]] = None):
-		memory = {'device': MemorySaver(), None: None}[memory]
+		
 		self.config = None 
-		if memory is not None:
-			self.config = {"configurable": {"thread_id": "1"}}
-		self.runnable = runnable.compile(checkpointer = memory) 
-		self.thread = thread 
+		if isinstance(runnable, CompiledGraph):
+			self.runnable = runnable 
+		elif isinstance(runnable, StateGraph):		
+			memory = {'device': MemorySaver(), None: None}[memory]
+			self.config = None 
+			if memory is not None:
+				self.config = {"configurable": {"thread_id": thread}}
+			self.runnable = runnable.compile(checkpointer = memory) 
 	
 	def _run_chat_mode(self):
 		while True:
@@ -143,8 +146,9 @@ class Assistant(Callable):
 			if user_input.lower() in ["quit", "exit", "q"]:
 				print("Ciao!")
 				break 
+			# note that with stream mode = values then value will be a list
 			for event in self.runnable.stream({"messages":[("user", user_input)]}, 
-						self.config, stream_mode = "values"):
+						self.config, stream_mode = None):
 				for value in event.values():
 					if isinstance(value["messages"][-1], BaseMessage):
 						if value["messages"][-1].content == "":
@@ -162,7 +166,7 @@ class Assistant(Callable):
 			self._run_QA_mode()
 	
 	@classmethod
-	def from_graph(cls, graph: StateGraph, thread: int = 1) -> Assist:
+	def from_graph(cls, graph: Union[StateGraph, CompiledGraph], thread: int = 1) -> Assist:
 		"""
 		accept an uncompiled graph as input
 		"""

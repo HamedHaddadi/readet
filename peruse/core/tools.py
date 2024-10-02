@@ -23,7 +23,7 @@ from . summarizers import PlainSummarizer
 
 # ## Google Scholar Search Tool ## #
 # API Wrapper
-class ScholarSearch(BaseModel):
+class GoogleScholarSearch(BaseModel):
 	"""
 	Wrapper for Serp API Google Scholar Search
 	Attributes:
@@ -107,7 +107,7 @@ class GoogleScholarTool(BaseTool):
         Useful for when you need to get information about
         research papers from Google Scholar
         Input should be a search query."""
-	api_wrapper: ScholarSearch 
+	api_wrapper: GoogleScholarSearch 
 
 	def _run(self, query:str) -> str:
 		"""
@@ -318,6 +318,8 @@ class PDFDownload(BaseModel):
 		return values 
 
 	def run(self, url: str, name:str) -> Union[None, str]:
+		if '.pdf' not in name:
+			name = '_'.join(name.split(' ')) + '.pdf'
 		try:
 			urlretrieve(url, path.join(self.save_path, name))
 		except:
