@@ -2,10 +2,12 @@
 # custom tools for interacting with documents #
 # ########################################### #
 import os
-from pydoc import resolve
-from time import time 
+import plotly 
+from time import time
+import pandas as pd  
 from os import path, makedirs, listdir
 from functools import wraps 
+import plotly.express as px 
 from tqdm import tqdm 
 from arxiv import Search as ArSearch 
 from arxiv import Client as ArClient    
@@ -379,8 +381,29 @@ class RetrieverTool(BaseTool):
 	def _run(self, query: str) -> str:
 		return self.retriever.run(query)
 
+
+# #### Charts and Plot Tools #### #
+class BarChart(BaseModel):
+	"""
+	takes a pandas dataframe and plots a barchart
+	"""
+	def run(self, frame: pd.DataFrame, x_label: str, y_label: str, color: str,
+				hover_name: str, hover_data: str) -> None:
+		hover_data = hover_data.split(',')
+		fig = px.bar(frame, y = y_label, x = x_label, orientation = 'h', 
+					color = color, color_continuous_scale = 'Turbo',
+						hover_name = hover_name, hover_data = hover_data,
+                 height = len(frame.index)*30, template = 'seaborn')
+		fig.layout.font.family = 'Gill Sans'
+		fig.layout.font.size = 15
+		fig.layout.xaxis.gridcolor = 'black'
+		fig.layout.yaxis.gridcolor = 'black'
+		fig.layout.xaxis.titlefont.family = 'Gill Sans'
+		fig.layout.xaxis.titlefont.size = 15
+		fig.layout.xaxis.tickfont.size = 15
+		plotly.offline.plot(fig, filename='search_results.html')		
 	
-# #### The following tools are useful when Args need not to be passed an instantiation #### #
+# #### The following tools are useful when Args need not to be passed at instantiation #### #
 @tool 
 def download_file(url: str, save_path: str, name: str) -> str:
     """

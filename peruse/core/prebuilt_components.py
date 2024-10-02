@@ -194,3 +194,20 @@ class ExtractKeywords:
 		text = self._text_from_pdf(document)
 		outputs = self.chain.invoke(text)
 		return ','.join(outputs.keywords) 
+
+# ### Runs a tool and saves the results in structured format ### #
+class ToStructured:
+	"""
+	a chain to structure a text into a schema
+	schema: a BaseModel pydantic model 
+	self.run return a dictionary 
+	"""
+	def __init__(self, schema: BaseModel, model: str = 'openai-chat'):
+		llm = models.configure_chat_model(model, temperature = 0)
+		template = prompts.TEMPLATES['to-structured']
+		prompt = PromptTemplate.from_template(template)
+		self.chain = (prompt | llm.with_structured_output(schema))
+	
+	def run(self, text: str) -> Dict:
+		outputs = self.chain.invoke(text)
+		return outputs.dict()

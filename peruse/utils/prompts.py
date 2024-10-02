@@ -96,9 +96,15 @@ RELEVANCE_GRADER = """
 # ### Keyword extraction from documents ### #
 EXTRACT_KEYWORDS = """
     you will be provided with a text. try to find keywords in this text. Avoid including name of the assignee, 
-        corporation, or the name of authors or people. Extract keywords that aretechnically relevant
+        corporation, or the name of authors or people. Extract keywords that are technically relevant
 {text}	
 """
+
+# ### structured outputs ### #
+TO_STRUCTURED = """
+	you are goven the following text. Try to structure this text using the keywords
+		provided to you. 
+			{text} """
 
 
 TEMPLATES = {'suspensions': SUSPENSIONS, 
@@ -112,6 +118,7 @@ TEMPLATES = {'suspensions': SUSPENSIONS,
 												'answer-grader': ANSWER_GRADER, 
 													'question-rewriter': QUESTION_REWRITER}, 
 						'agentic-rag': {'relevance-grader': RELEVANCE_GRADER}, 
-							'extract-keywords': EXTRACT_KEYWORDS}
+							'extract-keywords': EXTRACT_KEYWORDS, 
+								'to-structured': TO_STRUCTURED}
 
 

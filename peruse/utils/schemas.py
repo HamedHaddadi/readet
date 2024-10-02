@@ -2,7 +2,7 @@
 # schemas for info extractor models #
 # ################################# #
 
-from typing import Optional, List  
+from typing import Optional, List, Sequence 
 from langchain_core.pydantic_v1 import BaseModel, Field 
 
 class Suspensions(BaseModel):
@@ -63,7 +63,17 @@ class General(BaseModel):
 	"""
 	results: List[str]
 
+class GoogleScholarSchema(BaseModel):
+	"""
+	The schema to structure google scholar search results 
+	"""
+	Titles: Sequence[str] = Field(default = [], description = "the list of titles of the manuscripts")
+	Authors: Sequence[str] = Field(default = [], description = "the list of names of the authors")
+	PDF_Links: Sequence[str] = Field(default = [], description = "the list of links to the pdf files")
+	Citation_Counts: Sequence[str] = Field(default = [], description = "the list of number of citations")
+
 
 SCHEMAS = {'suspensions': Suspensions,
 			'raw_materials': RawMaterials, 
-				'general': General}
+				'general': General, 
+					'google_scholar': GoogleScholarSchema}
