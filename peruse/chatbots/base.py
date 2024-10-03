@@ -1,5 +1,6 @@
 # Generate classes and functions to run all chatbots #
 from typing import (TypedDict, Dict, Annotated, List, Optional, Literal, TypeVar, Sequence, Union)
+from pprint import pprint 
 from .. utils import models
 from .. core import tools as peruse_tools   
 from . import base 
@@ -147,23 +148,29 @@ class Assistant(Callable):
 				print("Ciao!")
 				break 
 			# note that with stream mode = values then value will be a list
+			# if stream_mode = None then it will be a dictionary  
 			for event in self.runnable.stream({"messages":[("user", user_input)]}, 
-						self.config, stream_mode = None):
+						self.config, stream_mode = 'values'):
 				for value in event.values():
-					if isinstance(value["messages"][-1], BaseMessage):
-						if value["messages"][-1].content == "":
+					if isinstance(value[-1], BaseMessage):
+						if value[-1].content == "":
 							print("Assistant: working on it!")
 						else:
-							print("Assistant:", value["messages"][-1].content)
+							print("Assistant:", value[-1].content)
 	
-	def _run_QA_model(self):
-		pass 
+	def _run_single_shot_mode(self, query: str) -> None:
+		inputs  = {"messages": [query]}
+		output = self.runnable.invoke(inputs, stream_mode = 'values')
+		pprint(output["messages"][-1].content)
 
-	def __call__(self, chat: bool = True) -> None:
+	def __call__(self, chat: bool = True, query: Optional[str] = None) -> None:
+		if not chat and query is None:
+			raise ValueError("chat mode is False so a query is needed! ") 
+
 		if chat:
 			self._run_chat_mode()
 		else:
-			self._run_QA_mode()
+			self._run_single_shot_mode(query)
 	
 	@classmethod
 	def from_graph(cls, graph: Union[StateGraph, CompiledGraph], thread: int = 1) -> Assist:

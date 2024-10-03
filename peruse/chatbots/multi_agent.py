@@ -3,6 +3,7 @@
 # ########################### #
 from typing import Annotated, Sequence, Dict, TypedDict, Union
 from functools import partial  
+from pprint import pprint 
 
 from langchain_core.messages import HumanMessage, BaseMessage 
 from langchain_core.tools import BaseTool 
@@ -98,6 +99,12 @@ class Supervisor:
 		else:
 			self.graph = workflow
 		return self.graph 
+	
+	def run(self, query: str) -> None:
+		inputs = {"messages": [query]}
+		output = self.graph.invoke(inputs, stream_mode = 'values')
+		pprint(output["messages"][-1].content)
+
 	
 	
 
