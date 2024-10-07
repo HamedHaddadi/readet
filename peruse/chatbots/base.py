@@ -154,7 +154,7 @@ class Assistant(Callable):
 				for value in event.values():
 					if isinstance(value[-1], BaseMessage):
 						if value[-1].content == "":
-							print("Assistant: working on it!")
+							print("Assistant: I am thinking... wait!")
 						else:
 							print("Assistant:", value[-1].content)
 	

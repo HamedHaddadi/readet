@@ -108,3 +108,7 @@ class MapReduceSummary(Callable):
 		else:
 			return None 
 
+SUMMARIZERS = {"plain": PlainSummarizer, 
+					"map-reduce": MapReduceSummary}
+
+

@@ -1,9 +1,10 @@
 # ################################## #
 # Agents built for specific purposes #
 # ################################## #
-from os import path
+from os import PathLike, path
 from pathlib import Path  
-from typing import Dict, Literal, List, Optional, overload, Sequence   
+from typing import Dict, Literal, List, Optional, overload, Sequence, Union
+from xml.dom.minidom import Document    
 import pandas as pd  
 from collections.abc import Callable 
 from langchain_core.pydantic_v1 import BaseModel, Field 
@@ -15,7 +16,7 @@ from langgraph.prebuilt import ToolNode
 from langgraph.graph import END, START, StateGraph, MessagesState
 from langchain_core.messages import AIMessage 
 from . import rags 
-from .. utils import models, questions, prompts    
+from .. utils import models, questions, prompts, docs  
 
 # ######################################## #
 #  Tavily search on extracted information  #
@@ -155,45 +156,10 @@ class SchemaFromPDF(Callable):
 				header = True  
 			info_df.to_csv(csv_file, header = header, index = True, sep = ',', mode = mode, na_rep = 'NULL')
 			
-
 	@staticmethod
 	def _get_arg_keys(callable: Callable) -> list:
 		args = callable.__code__.co_varnames[:callable.__code__.co_argcount]
 		return [arg for arg in args if arg not in ['self', 'cls']]
-
-# ############ Keyword extraction ############# #
-class Keys(BaseModel):
-	keywords: Sequence[str] = Field(default = [], description = 'list of extracted keywords')
-
-class ExtractKeywords:
-	"""
-	class to extract keywords from a text
-	Returns:
-		a comma separated string of extracted keywords
-	"""
-	
-	def __init__(self, model: str = 'openai-chat'):
-		llm = models.configure_chat_model(model = model, temperature = 0)
-		template = prompts.TEMPLATES['extract-keywords']
-		prompt = PromptTemplate.from_template(template)
-		self.chain = (prompt | llm.with_structured_output(Keys))
-	
-	@staticmethod 
-	def _text_from_pdf(document: str) -> str:
-		doc_path = Path(document)
-		if doc_path.exists() and doc_path.is_file() and '.pdf' in document:
-			pages = pdf.PyMuPDFLoader(document, extract_images = True)
-			if pages is not None:
-				pages = pages.load_and_split()
-				text = '\n'.join([doc.page_content for doc in pages])
-				return text 
-		else:
-			return None 
-	
-	def run(self, document: str) -> str:
-		text = self._text_from_pdf(document)
-		outputs = self.chain.invoke(text)
-		return ','.join(outputs.keywords) 
 
 # ### Runs a tool and saves the results in structured format ### #
 class ToStructured:
@@ -206,8 +172,9 @@ class ToStructured:
 		llm = models.configure_chat_model(model, temperature = 0)
 		template = prompts.TEMPLATES['to-structured']
 		prompt = PromptTemplate.from_template(template)
-		self.chain = (prompt | llm.with_structured_output(schema))
+		self.runnable = (prompt | llm.with_structured_output(schema))
 	
 	def run(self, text: str) -> Dict:
-		outputs = self.chain.invoke(text)
+		outputs = self.runnable.invoke(text)
 		return outputs.dict()
+

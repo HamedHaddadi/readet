@@ -1,6 +1,8 @@
 from langchain_community.document_loaders import PyPDFLoader, pdf
 from langchain_core.documents.base import Document  
-from typing import Dict, List, Union  
+from typing import Dict, List, Union
+from os import PathLike
+from pathlib import Path    
 
 # ################################ #
 # utilities to work with documents #
@@ -43,3 +45,14 @@ def load_and_split_pdf(pdf_file: str, split = True) -> Union[List, None]:
 				return None 
 		except:
 			return None 
+
+def text_from_pdf(document: Union[str, PathLike]) -> Union[str, None]:
+	doc_path = Path(document)
+	if doc_path.exists() and doc_path.is_file() and '.pdf' in document:
+		pages = pdf.PyMuPDFLoader(document, extract_images = True)
+		if pages is not None:
+			pages = pages.load_and_split()
+			text = '\n'.join([doc.page_content for doc in pages])
+			return text 
+		else:
+			return None 	

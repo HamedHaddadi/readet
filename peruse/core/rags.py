@@ -6,19 +6,43 @@ from langchain_community.document_loaders import PyPDFLoader, pdf
 from langchain_text_splitters import RecursiveCharacterTextSplitter 
 from langchain_chroma import Chroma
 from langchain_core.messages import BaseMessage, HumanMessage
-from langchain_core.prompts import PromptTemplate, ChatPromptTemplate  
+from langchain_core.prompts import BasePromptTemplate, PromptTemplate, ChatPromptTemplate, format_document  
 from langchain_core.runnables.base import RunnableSequence 
 from langchain_core.runnables import RunnablePassthrough 
 from langchain_core.output_parsers import StrOutputParser 
 from langchain_core.pydantic_v1 import BaseModel, Field 
+from langchain_core.retrievers import BaseRetriever
+from langchain_core.tools import BaseTool  
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition 
 from langgraph.graph.message import add_messages 
 from pprint import pprint 
 from pathlib import Path 
-from . tools import RetrieverRunnable, RetrieverTool
 from .. utils import prompts, models, docs
 from .. utils.schemas import SCHEMAS 
+
+# ##### classes that are useful for all RAGS ##### #
+class RetrieverRunnable(BaseModel):
+	"""
+	Takes a retriever as an attribute and invokes a query on the retriever
+	"""
+	retriever: BaseRetriever
+	prompt: BasePromptTemplate = PromptTemplate.from_template("{page_content}")
+
+	def run(self, query: str) -> str:
+		docs = self.retriever.invoke(query)
+		return "\n\n".join(format_document(doc, self.prompt) for doc in docs)
+
+class RetrieverTool(BaseTool):
+	name: str = "retriever_tool"
+	description: str = """retriever tool which is used to retriever documents from a 
+				vector store. """
+	retriever: RetrieverRunnable 
+
+	def _run(self, query: str) -> str:
+		return self.retriever.run(query)
+
+	
 
 # ################################### #
 # 			      RAGs				  #
@@ -138,7 +162,6 @@ class SelfRAG:
 					 	 chat_model: str = 'openai-chat', 
 						  	embedding_model: str = 'openai-embedding'):
 
-		
 		self.retrieval_grader = None 
 		self.hallucination_grader = None 
 		self.answer_grader = None 
@@ -447,15 +470,15 @@ class AgenticRAG:
 		self.retriever = None 
 		self.retriever_tool = None 
 		self.relevance_chain = None 
-		self.generate_chain = None 
+		self.generate_chain = None
 
-		self.graph = None 
+		# runnable is a graph in this case
+		self.runnable = None 
 		self._configured = False
 		self._built = False  
 
 		self.chat_model = chat_model 
 		self.embedding_model = embedding_model 
-
 		self.splitter = RecursiveCharacterTextSplitter(chunk_size = chunk_size,
 						 chunk_overlap = chunk_overlap, add_start_index = True)
 
@@ -611,13 +634,13 @@ class AgenticRAG:
 		flow.add_conditional_edges("retrieve", self._check_relevance)
 		flow.add_edge("generate", END)
 		flow.add_edge("rewrite", "agent")
-		self.graph = flow.compile()
+		self.runnable = flow.compile()
 		self._built = True 
 	
 	# run methods 
 	def _run_stream(self, query: str):
 		inputs = {"messages": [("user", query)]}
-		for output in self.graph.stream(inputs, stream_mode = 'updates'):
+		for output in self.runnable.stream(inputs, stream_mode = 'updates'):
 			for key, value in output.items():
 				pprint(f"Output from node '{key}':")
 				pprint(" >>> <<<")
@@ -626,7 +649,7 @@ class AgenticRAG:
 	
 	def _run(self, query: str) -> str:
 		inputs = {"messages": [(query),]}
-		output = self.graph.invoke(inputs, stream_mode= "values")
+		output = self.runnable.invoke(inputs, stream_mode= "values")
 		return output["messages"][-1].content 
 	
 	def run(self, query: str, stream: bool = False) -> Union[str, None]:

@@ -2,10 +2,12 @@
 # custom tools for interacting with documents #
 # ########################################### #
 import os
+import sys 
 import plotly 
 from time import time
 import pandas as pd  
-from os import path, makedirs, listdir
+from pathlib import Path 
+from os import path, makedirs, listdir, PathLike 
 from functools import wraps 
 import plotly.express as px 
 from tqdm import tqdm 
@@ -17,9 +19,12 @@ from langchain.pydantic_v1 import BaseModel, Field, root_validator
 from langchain_core.tools import BaseTool, tool  
 from langchain_core.retrievers import BaseRetriever 
 from langchain_core.prompts import BasePromptTemplate, PromptTemplate, format_document  
-from typing import Optional, Any, Dict, Union, List   
+from langchain_community.document_loaders import pdf 
+from typing import Optional, Any, Dict, Union, List, Sequence   
 from urllib.request import urlretrieve  
-from . summarizers import PlainSummarizer
+from . summarizers import SUMMARIZERS
+from . rags import RAGS 
+from .. utils import models, prompts, docs 
 
 # ## Google Scholar Search Tool ## #
 # API Wrapper
@@ -354,7 +359,7 @@ class PDFSummaryTool(BaseTool):
 
 	def _run(self) -> None:
 		pdf_files =[path.join(self.save_path, pdf_file) for pdf_file in listdir(self.save_path) if '.pdf' in pdf_file]
-		sum_chain = PlainSummarizer(chat_model = 'openai-chat')
+		sum_chain = SUMMARIZERS["plain"](chat_model = 'openai-chat')
 		if len(pdf_files) > 0:
 			for pdf_file in tqdm(pdf_files):
 				summary = sum_chain(pdf_file)
@@ -363,25 +368,191 @@ class PDFSummaryTool(BaseTool):
 					f.write("\n")
 					f.write('******* . ******* \n')
 
-# ########### Retriever Tool ############## #
-class RetrieverRunnable(BaseModel):
+class ListFilesTool(BaseTool):
 	"""
-	Takes a retriever as an attribute and invokes a query on the retriever
+	This tool lists all files stored in a directory or folder. Files must have 
+		a certain format or suffix
 	"""
-	retriever: BaseRetriever
-	prompt: BasePromptTemplate = PromptTemplate.from_template("{page_content}")
-	def run(self, query: str) -> str:
-		docs = self.retriever.invoke(query)
-		return "\n\n".join(format_document(doc, self.prompt) for doc in docs)
+	name: str = "file_list_tool"
+	description: str = """
+		this tool lists files that are stored in a directory or folder. Useful when you 
+			are asked to list files that are stored in a filder or directory
+	"""
+	save_path: str = Field(description = "path to the storing directory")
+	suffix: str = Field(default = '.pdf', description ="suffix of the file")
 
-class RetrieverTool(BaseTool):
-	name: str = "retriever_tool"
-	description: str = """retriever tool which is used to retriever documents from a 
-				vector store. """
-	retriever: RetrieverRunnable 
+	def _run(self) -> List[Union[str, PathLike]]:
+		files = [path.join(self.save_path, file_name) for file_name in listdir(self.save_path)
+						if self.suffix in file_name]
+		return files 
+
+# ######### keyword extraction tool ######### #
+class Keywords(BaseModel):
+	keywords_list: Sequence[str] = Field(default = [], description = 'list of extracted keywords')
+
+class ExtractKeywords(BaseModel):
+	runnable: Any 
+
+	@root_validator(pre =True)
+	def generate_runnable_chain(cls, values: Dict) -> Dict:
+		llm = models.configure_chat_model(model = 'openai-chat', temperature = 0)
+		template = prompts.TEMPLATES["extract-keywords"]
+		prompt = PromptTemplate.from_template(template)
+		values['runnable'] = (prompt | llm.with_structured_output(Keywords))
+		return values 
+	
+	def run(self, document: str) -> str:
+		if document.lower().endswith('.pdf'):
+			text = docs.text_from_pdf(document)
+		outputs = self.runnable.invoke(text)
+		return ','.join(outputs.keywords_list)
+
+class ExtractKeywordsTool(BaseTool):
+	"""
+	This tool extract keywords from a list of pdf files that are stored in a folder. 
+	It can either return 
+	"""
+	name: str = "extract_keywords_to_file_tool"
+	description: str = """
+		this tool extracts keywords from a list of pdf files stored in a folder
+			and either writes the keywords in a .txt file or returns them.
+			Use this tool when you are asked to extract keywords from pdf files that are
+				stored in a path.
+			_run first constructs a list of pdf files  """
+	extractor: ExtractKeywords 
+	files_path: Optional[str] = None 
+	save_to_file: bool = True 
+
+	def _write_to_file(self, keywords: str, title: str) -> None:
+		with open(path.join(self.files_path, 'extracted_keywords.txt'), 'a+') as f:
+			f.write(f">>>> {title} <<<< \n")
+			f.write(keywords)
+			f.write(">>>> <<<< \n")
+
+	def _run(self) -> Union[str, None]:
+		pdf_files = [path.join(self.files_path, pdf_file) for pdf_file in listdir(self.files_path) if '.pdf' in pdf_file]
+		for pdf_file in tqdm(pdf_files):
+			title = Path(pdf_file).name.split('.pdf')[0]
+			keywords = self.extractor.run(pdf_file)
+			if self.save_to_file:
+				self._write_to_file(keywords, title)
+			else:
+				return keywords 
+
+# ################### #
+# A Plain RAG tool	  #
+# ##################  #
+class RAGTool(BaseTool):
+	"""
+	Tool that uses Retrieval Augmented Generation to query a pdf file
+	"""
+	name = "rag_tool"
+	description: str = """
+		A tool to query a pdf file. Useful when you are asked to query a
+			pdf document
+	"""
+	rag: Any = Field(description = "the RAG type")  
+	pdf_file: str = Field(description = "the pdf file to query")
+
+	@root_validator(pre = True)
+	def generate_rag(cls, values: Dict) -> Dict:
+		pdf_file = values.get("pdf_file")
+		values["rag"] = RAGS["agentic-rag-pdf"](pdf_file)
+		return values 
 
 	def _run(self, query: str) -> str:
-		return self.retriever.run(query)
+		return self.rag.run(query)
+
+# ############################################### 	#
+# A tool to extract keywords from a pdf file and  	#
+# extract keywords and query the pdf using keywords #
+# ##############################################    #
+class QueryKeywordsTool(BaseTool):
+	"""
+	Tool that uses Keyword extractor and retrieval augmented generation
+		to query a pdf file using the keywords that are extracted 
+		from the pdf.
+	"""
+	name = "query_keywords_tool"
+	description = """
+		A tool to query pdf files using keywords that are extracted from the pdf file 
+	"""
+	extractor: ExtractKeywords 
+	
+	def _run(self, pdf_file: str) -> Union[str, None]:
+		rag = RAGS["agentic-rag-pdf"](pdf_file)
+		rag.build()
+		keywords = self.extractor.run(pdf_file)
+		results = {key: None for key in keywords.split(',')}
+		for keyword in keywords.split(','):
+			query = f"what does this article say about {keyword}"
+			results[keyword] = rag.run(query)
+		return '===== \n'.join([f"***{key} ==> {result} \n" for key, result in results.items()])
+
+# ############################################### 	#
+# A tool to extract keywords from a pdf file and  	#
+# extract keywords and query the pdf using keywords #
+# ##############################################    #
+
+class GistToFileTool(BaseTool):
+	"""
+	This tool uses keyword extractor, summarizer and retrieval augmented generation
+		to summarize and query pdf files and stores the results in a text file. 
+	It first lists all pdf files that are stored in a directory and then it 
+		queries them one by one. 
+	"""
+	name = "query_by_keywords_store_to_file"
+	description = """
+		A tool to query pdf files using keywords that are extracted from the pdf file
+			and writing the results to a text file. Use this tool when you are asked to 
+			query pdf files using the keywords. 
+	"""
+	extractor: ExtractKeywords 
+	files_path: str = Field(description = "path to all pdf files")
+	rag_type: str = Field(description = "the RAG model", default = 'agentic-rag-pdf')
+	summarizer_type: str = Field(description = "the summarizer model", default = 'plain')
+	pdf_files: List[str]
+	
+	@root_validator(pre = True)
+	def generate_files(cls, values: Dict) -> Dict:
+		files_path = values.get('files_path')
+		files = [path.join(files_path, file_name) for file_name in listdir(files_path)
+					 if file_name.lower().endswith('.pdf')]
+		values['pdf_files'] = files 
+		return values 
+
+	def _write_to_file(self, title: str, summary: str, query_result: Dict[str, str]) -> None:
+		with open(path.join(self.files_path, 'gist.txt'), 'a+') as f:
+			f.write(f"*** TITLE ***\n")
+			f.write(title.upper() + '\n')
+			f.write(f"*** SUMMARY ***\n")
+			f.write(f'*** {summary} *** \n')
+			f.write('\n')
+			f.write(f"*** KEY INFORMATION ***\n")
+			f.write('\n'.join([f"{key} : {query_results} \n" 
+				for key, query_results in query_result.items()]))
+			f.write('**** >>> <<<   ****')
+	
+	get_title = staticmethod(lambda file_name: Path(file_name).name.split('.pdf')[0])
+
+	def _run(self) -> str:
+		try:
+			summarizer = SUMMARIZERS[self.summarizer_type]()
+			for pdf_file in self.pdf_files:
+				title = self.get_title(pdf_file)
+				rag = RAGS[self.rag_type](pdf_file)
+				rag.build()
+				summary = summarizer(pdf_file)
+				keywords = self.extractor.run(pdf_file)
+				query_results = {key: None for key in keywords.split(',')}
+				for keyword in query_results.keys():
+					query = f"what does the manuscript say about {keyword} ?"
+					query_results[keyword] = rag.run(query)
+				self._write_to_file(title, summary, query_results)
+			return "keywords extraction, summary building and output to text file suucessful"
+		except Exception as e:
+			return f"encountered an error {sys.exc_info()[0]}"
+
 
 
 # #### Charts and Plot Tools #### #
