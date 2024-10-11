@@ -32,7 +32,7 @@ class KnowledgeGraph(Callable):
 		self.graph_doc = None 
 	
 	def _build(self):
-		llm = models.configure_chat_model(model = 'openai-chat', temperature = 0)
+		llm = models.configure_chat_model(model = 'openai-gpt-4o-mini', temperature = 0)
 		llm_transformer = LLMGraphTransformer(llm = llm, allowed_nodes = self.allowed_nodes, 
 					allowed_relationships = self.allowed_relations)
 		documents = [Document(self.summaries)]
@@ -56,7 +56,7 @@ class KnowledgeGraph(Callable):
 			self.graph.add_graph_documents(self.graph_doc)
 
 	@classmethod 
-	def from_pdf(cls, pdf: Union[str, PathLike, List], chat_model: str = 'openai-chat', temperature: int = 0,
+	def from_pdf(cls, pdf: Union[str, PathLike, List], chat_model: str = 'openai-gpt-4o-mini', temperature: int = 0,
 				 store_graph: bool = True,  summarizer: str = 'plain', allowed_nodes: Optional[List[str]] = None, 
 						allowed_relations: Optional[List[str]] = None, **summarizer_kw: Any) -> KG:
 

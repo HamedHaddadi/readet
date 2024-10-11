@@ -58,8 +58,8 @@ class RAGPDF:
 
 	def __init__(self, chunk_size: int = 2000,
 	 				chunk_overlap: int = 150,
-					 	 chat_model: str = 'openai-chat', 
-						  	embedding_model: str = 'openai-embedding',
+					 	 chat_model: str = 'openai-gpt-4o-mini', 
+						  	embedding_model: str = 'openai-text-embedding-3-large',
 						  	prompt: str = 'suspensions', 
 							  	temperature: int = 0, 
 								  	replacements: Optional[Dict[str, str]] = None):
@@ -100,7 +100,7 @@ DEFAULT_PROMPT = """You are an expert extraction algorithm.
 
 # plain extactor chain
 def extract_schema_plain(schemas: Union[List[str], str], 
-				chat_model:str = 'openai-chat', 
+				chat_model:str = 'openai-gpt-4o-mini', 
 			 			temperature: int = 0) -> Union[Dict[str, RunnableSequence], RunnableSequence]:
 	prompt = ChatPromptTemplate.from_messages([("system", DEFAULT_PROMPT), ("human", "{text}")])
 	llm = models.configure_chat_model(chat_model, temperature = temperature)
@@ -159,8 +159,8 @@ class SelfRAG:
 	RECURSION_LIMIT = 40
 	def __init__(self, pdf_file: str, chunk_size: int = 4000,
 	 				chunk_overlap: int = 150,
-					 	 chat_model: str = 'openai-chat', 
-						  	embedding_model: str = 'openai-embedding'):
+					 	 chat_model: str = 'openai-gpt-4o-mini', 
+						  	embedding_model: str = 'openai-text-embedding-3-large'):
 
 		self.retrieval_grader = None 
 		self.hallucination_grader = None 
@@ -461,12 +461,12 @@ class RelevanceGrader(BaseModel):
 
 class AgenticRAG:
 	"""
-	agentic RAG that runs a RAG on asingle pdf file. 
+	agentic RAG that runs a RAG on a single pdf file. 
 	"""
 	def __init__(self, pdf_file: str, chunk_size: int = 2000, 
 						chunk_overlap: int = 150, 
-								chat_model: str = "openai-chat", 
-									embedding_model: str = "openai-embedding"):
+								chat_model: str = "openai-gpt-4o-mini", 
+									embedding_model: str = "openai-text-embedding-3-large"):
 		self.retriever = None 
 		self.retriever_tool = None 
 		self.relevance_chain = None 
@@ -658,6 +658,10 @@ class AgenticRAG:
 			return self._run(query)
 		else:
 			self._run_stream(query)
+	
+	# to support calling the class as a function
+	def __call__(self, query: str, stream: bool = False) -> Union[str, None]:
+		return self.run(query, stream = stream)
 
 # ##################################### #
 RAGS = {'single-pdf': RAGPDF, 

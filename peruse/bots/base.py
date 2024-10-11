@@ -54,7 +54,7 @@ class AgentState(TypedDict):
 	is_last_step: IsLastStep
 
 def create_react_graph(tools: Union[Sequence[BaseTool], BaseTool], agent_use: str,  model: Optional[LanguageModelLike] = None, 
-				tool_error_handling: bool = True,  chat_model: str = 'openai-chat', 
+				tool_error_handling: bool = True,  chat_model: str = 'openai-gpt-4o-mini', 
 						compile: bool = True, 
 							added_prompt: str = "") -> Union[StateGraph, CompiledGraph]:
 	"""
@@ -66,7 +66,7 @@ def create_react_graph(tools: Union[Sequence[BaseTool], BaseTool], agent_use: st
 			a same LLMs for multiple agents
 		agent_use: a string that shows application of the agent  
 		chat_model: an string which will be used to choose a LLM from 'LangChain' that supports tool calling
-					the default value is 'openai-chat' 
+					the default value is 'openai-gpt-4o-mini' 
 		tool_error_handling: boolean for adding fall_back. 
 	Returns:
 		a compiled graph

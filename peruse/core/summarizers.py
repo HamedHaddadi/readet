@@ -22,7 +22,7 @@ class PlainSummarizer(Callable):
 	generates summary of a text using a simple (prompt | llm) chain
 	it can be instantiated from a pdf file
 	"""
-	def __init__(self, document: Optional[List] = None, chat_model: str = 'openai-chat', temperature: int = 0):
+	def __init__(self, document: Optional[List] = None, chat_model: str = 'openai-gpt-4o-mini', temperature: int = 0):
 		llm = models.configure_chat_model(chat_model, temperature = temperature)
 		template = prompts.PLAIN_SUMMARY 
 		prompt = PromptTemplate.from_template(template)
@@ -38,7 +38,7 @@ class PlainSummarizer(Callable):
 			return ""
 	
 	@classmethod
-	def from_pdf(cls, pdf_file: str, chat_model: str = 'oprnai-chat', temperature: int = 0) -> PS:
+	def from_pdf(cls, pdf_file: str, chat_model: str = 'openai-gpt-4o-mini', temperature: int = 0) -> PS:
 		document = docs.load_and_split_pdf(pdf_file)
 		if document is not None:
 			return cls(document, chat_model = chat_model, temperature = temperature)
@@ -46,7 +46,7 @@ class PlainSummarizer(Callable):
 			return None 
 
 # refine summarizer
-def refine_pdf_summary(pdf_file: str, chat_model: str = 'openai-chat', 
+def refine_pdf_summary(pdf_file: str, chat_model: str = 'openai-gpt-4o-mini', 
 				temperature = 0) -> str:
 	"""
 	uses predefined load_summarize_chain of LangChain to summarize a pdf file
@@ -67,7 +67,7 @@ class MapReduceSummary(Callable):
 	uses a MapReduce approach to generate a summary of the input text
 	can be instantiated from pdf files or other texts
 	"""
-	def __init__(self, split_documents: List, chat_model: str = 'openai-chat',
+	def __init__(self, split_documents: List, chat_model: str = 'openai-gpt-4o-mini',
 				 temperature: int = 0, reduce_max_tokens: int = 4000):
 		self.llm = models.configure_chat_model(chat_model, temperature = temperature)
 		self.map_reduce_chain = None 
@@ -96,7 +96,7 @@ class MapReduceSummary(Callable):
 	
 	
 	@classmethod 
-	def from_pdf(cls, pdf_file: str, chat_model: str = 'openai-chat', temperature: int = 0, 
+	def from_pdf(cls, pdf_file: str, chat_model: str = 'openai-gpt-4o-mini', temperature: int = 0, 
 						chunk_size: int = 1000, chunk_overlap: int = 0, 
 									reduce_max_tokens: int = 4000) -> MR:
 		documents = docs.load_and_split_pdf(pdf_file, split = False)

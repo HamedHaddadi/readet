@@ -33,13 +33,12 @@ class Supervisor:
 		build() method returns a Runnable(a compiled graph)
 		_build() constructs that graph. each agent can be invoked by its name. 
 	"""
-	def __init__(self, agents: Dict[str, Sequence[BaseTool]], model: str = 'openai-chat'):
+	def __init__(self, agents: Dict[str, Sequence[BaseTool]], model: str = 'openai-gpt-4o-mini'):
 		self.agents = agents 
 		self._compiled = False  
 		self.llm = models.configure_chat_model(model, temperature = 0)
 
 		self.agent_names = list(self.agents.keys())
-		print(f"the agent names are {self.agent_names}")
 		system_prompt1 = f"""You are a supervisor tasked with managing a conversation between the
           	following workers: {self.agent_names}. Given the following user request,
          	respond with the worker to act next. Each worker will perform a

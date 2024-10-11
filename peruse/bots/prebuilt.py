@@ -16,7 +16,7 @@ from . multi_agent import Supervisor
 # search_download_gist_graph: search in the search_in, download the pdf files and generate a gist of the material mentioned in the pdf and
 # 	save them to a .txt file. 
 # ########################################################### #
-def search_download_gist_graph(save_path: str, compile: bool = False, 
+def search_download_query_by_keyword_graph(save_path: str, compile: bool = False, 
 		agent_type: Literal['react'] = 'react',
 			search_in: Literal['patents', 'scholar', 'arxiv'] = 'scholar', 
 						max_number: int = 10, rag_type: str = 'agentic-rag-pdf', 
@@ -47,7 +47,7 @@ def search_download_gist_graph(save_path: str, compile: bool = False,
 def search_download_summary_graph(save_path: str, compile: bool = False, 
 		agent_type: Literal['react', 'supervisor'] = 'react', search_in: Literal['patents', 'scholar', 'arxiv'] = 'patents', 
 			max_number: int = 10,  summarizer_type: Literal['plain'] = 'plain', 
-				chat_model: Literal['openai-chat', 'openai-gpt-4o'] = 'openai-chat', 
+				chat_model: str = 'openai-gpt-4o-mini', 
 					added_prompt: str = "") -> Union[StateGraph, CompiledGraph]:
 	"""
 	search in the search_in, download the pdf files and generate a summary of the material mentioned in the pdf and
@@ -59,7 +59,8 @@ def search_download_summary_graph(save_path: str, compile: bool = False,
 	if search_in == 'scholar':
 		search_tool = peruse_tools.GoogleScholarTool(api_wrapper = peruse_tools.GoogleScholarSearch(top_k_results = max_number))
 	elif search_in == 'patents':
-		search_tool = peruse_tools.GooglePatentTool(api_wrapper = peruse_tools.PatentSearch(max_number_of_pages = max_number)) 
+		search_tool = peruse_tools.GooglePatentTool(api_wrapper = peruse_tools.PatentSearch(max_number_of_pages = max_number),
+				save_path = save_path) 
 
 	download_tool = peruse_tools.PDFDownloadTool(downloader = peruse_tools.PDFDownload(save_path = save_path))
 	summary_tool = peruse_tools.PDFSummaryTool(save_path = save_path, to_file = True,

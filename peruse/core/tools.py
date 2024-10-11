@@ -241,12 +241,17 @@ class GooglePatentTool(BaseTool):
         patents from Google Patents
         Input should be a search query."""
 	api_wrapper: PatentSearch 
+	save_path: Optional[str] = Field(description = "path to the storing directory", default = None)
 
 	def _run(self, query:str) -> str:
 		"""
 		Use the tool
 		"""
-		return self.api_wrapper.run(query)
+		search_results = self.api_wrapper.run(query)
+		if self.save_path is not None:
+			with open(path.join(self.save_path, 'patents_scouting_results.txt'), 'a') as f:
+				f.write(search_results)
+		return search_results
 
 # ####### Semantic Scholar Custom Tool ####### #
 class SemanticSearch(BaseModel):
@@ -349,11 +354,11 @@ class PDFDownloadTool(BaseTool):
 class PDFSummary(BaseModel):
 	summarizer: Any 
 	summarizer_type: Literal['plain'] = 'plain'
-	chat_model: Literal['openai-gpt-4o', 'openai-chat'] = 'openai-chat'
+	chat_model: str = Field(description = "the chat model", default = 'openai-gpt-4o-mini')
 
 	@root_validator(pre = True)
 	def setup_summarizer(cls, values: Dict) -> Dict:
-		values['summarizer'] = SUMMARIZERS[values.get('summarizer_type', 'plain')](chat_model = values.get('chat_model', 'openai-chat'))
+		values['summarizer'] = SUMMARIZERS[values.get('summarizer_type', 'plain')](chat_model = values.get('chat_model', 'openai-gpt-4o-mini'))
 		return values 
 	
 	def run(self, pdf_file: str) -> str:
@@ -423,7 +428,7 @@ class ExtractKeywords(BaseModel):
 
 	@root_validator(pre =True)
 	def generate_runnable_chain(cls, values: Dict) -> Dict:
-		llm = models.configure_chat_model(model = 'openai-chat', temperature = 0)
+		llm = models.configure_chat_model(model = 'openai-gpt-4o-mini', temperature = 0)
 		template = prompts.TEMPLATES["extract-keywords"]
 		prompt = PromptTemplate.from_template(template)
 		values['runnable'] = (prompt | llm.with_structured_output(Keywords))
@@ -479,17 +484,19 @@ class RAGTool(BaseTool):
 		A tool to query a pdf file. Useful when you are asked to query a
 			pdf document
 	"""
-	rag: Any = Field(description = "the RAG type")  
+	rag: Any = Field(description = "the RAG model")  
+	rag_type: str = Field(description = "the RAG type", default = 'agentic-rag-pdf')
 	pdf_file: str = Field(description = "the pdf file to query")
 
 	@root_validator(pre = True)
 	def generate_rag(cls, values: Dict) -> Dict:
 		pdf_file = values.get("pdf_file")
-		values["rag"] = RAGS["agentic-rag-pdf"](pdf_file)
+		rag_type = values.get("rag_type", 'agentic-rag-pdf')
+		values["rag"] = RAGS[rag_type](pdf_file)
 		return values 
 
 	def _run(self, query: str) -> str:
-		return self.rag.run(query)
+		return self.rag(query)
 
 # ############################################### 	#
 # A tool to extract keywords from a pdf file and  	#
@@ -505,16 +512,27 @@ class QueryKeywordsTool(BaseTool):
 	description: str = """
 		A tool to query pdf files using keywords that are extracted from the pdf file 
 	"""
-	extractor: ExtractKeywords 
+	extractor_type: str =  Field(description = "the keyword extractor type", default = 'plain')
+	rag_type: str = Field(description = "the RAG type", default = 'agentic-rag-pdf')
+	extractor: Any = Field(description = "the keyword extractor model")
+	
+	@root_validator(pre = True)
+	def generate_rag(cls, values: Dict) -> Dict:
+		extractor_type = values.get("extractor_type", 'plain')
+		if extractor_type == 'plain':
+			values["extractor"] = ExtractKeywords()
+		else:
+			raise ValueError(f"extractor type {extractor_type} is not supported")
+		return values 
 	
 	def _run(self, pdf_file: str) -> Union[str, None]:
-		rag = RAGS["agentic-rag-pdf"](pdf_file)
+		rag = RAGS[self.rag_type](pdf_file)
 		rag.build()
 		keywords = self.extractor.run(pdf_file)
 		results = {key: None for key in keywords.split(',')}
 		for keyword in keywords.split(','):
 			query = f"what does this article say about {keyword}"
-			results[keyword] = rag.run(query)
+			results[keyword] = self.rag(query)
 		return '===== \n'.join([f"***{key} ==> {result} \n" for key, result in results.items()])
 
 # ############################################### 	#
