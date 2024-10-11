@@ -44,7 +44,12 @@ def load_and_split_pdf(pdf_file: str, split = True) -> Union[List, None]:
 			else:
 				return None 
 		except:
-			return None 
+			return None
+
+def load_pdf_with_images(pdf_file: str) -> Union[List, None]:
+	loader = PyPDFLoader(pdf_file, extract_images = True)
+	docs = loader.load_and_split()
+	return docs 
 
 def text_from_pdf(document: Union[str, PathLike]) -> Union[str, None]:
 	doc_path = Path(document)

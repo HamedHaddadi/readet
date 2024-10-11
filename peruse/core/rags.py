@@ -10,7 +10,7 @@ from langchain_core.prompts import BasePromptTemplate, PromptTemplate, ChatPromp
 from langchain_core.runnables.base import RunnableSequence 
 from langchain_core.runnables import RunnablePassthrough 
 from langchain_core.output_parsers import StrOutputParser 
-from langchain_core.pydantic_v1 import BaseModel, Field 
+from pydantic import BaseModel, Field 
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.tools import BaseTool  
 from langgraph.graph import END, START, StateGraph
@@ -553,10 +553,8 @@ class AgenticRAG:
 
 		score = self.relevance_chain.invoke({"question": question, "context": context}).binary_score 
 		if score == "yes":
-			print(">>> Retrieved relevant document <<<")
 			return "generate"
 		elif score == "no":
-			print(">>> Did not retrieve relevant document <<<")
 			return "rewrite"
 	
 	def _agent(self, state: AgentState) -> Dict[Literal["messages"], Sequence[BaseMessage]]:

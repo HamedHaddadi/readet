@@ -7,6 +7,7 @@ from langchain_text_splitters import CharacterTextSplitter
 from langchain_core.prompts import PromptTemplate 
 from langchain.chains import MapReduceDocumentsChain, ReduceDocumentsChain 
 from langchain.chains.summarize import load_summarize_chain
+from langchain_community.document_loaders import pdf 
 from langchain.chains.llm import LLMChain 
 from langchain.chains.combine_documents.stuff import StuffDocumentsChain 
 from .. utils import prompts, models, docs
@@ -28,17 +29,17 @@ class PlainSummarizer(Callable):
 		self.chain = (prompt | llm)
 		self.document = document 
 	
-	def __call__(self, pdf: Union[str, None]) -> str:
-		if self.document is None and pdf is not None:
-			self.document = docs.load_and_split_pdf(pdf)
+	def __call__(self, pdf_file: Union[str, None]) -> str:
+		if self.document is None and pdf_file is not None:
+			self.document = docs.load_and_split_pdf(pdf_file)
 		if self.document is not None:
 			return self.chain.invoke(self.document).content 
 		else:
 			return ""
 	
 	@classmethod
-	def from_pdf(cls, pdf: str, chat_model: str = 'oprnai-chat', temperature: int = 0) -> PS:
-		document = docs.load_and_split_pdf(pdf)
+	def from_pdf(cls, pdf_file: str, chat_model: str = 'oprnai-chat', temperature: int = 0) -> PS:
+		document = docs.load_and_split_pdf(pdf_file)
 		if document is not None:
 			return cls(document, chat_model = chat_model, temperature = temperature)
 		else:

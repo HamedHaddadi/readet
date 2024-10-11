@@ -55,7 +55,8 @@ class AgentState(TypedDict):
 
 def create_react_graph(tools: Union[Sequence[BaseTool], BaseTool], agent_use: str,  model: Optional[LanguageModelLike] = None, 
 				tool_error_handling: bool = True,  chat_model: str = 'openai-chat', 
-						compile: bool = True) -> Union[StateGraph, CompiledGraph]:
+						compile: bool = True, 
+							added_prompt: str = "") -> Union[StateGraph, CompiledGraph]:
 	"""
 	Creates a graph that works with a LLM for performing tool calling. 
 	This function is similar to langgraph create_react_agent 
@@ -75,8 +76,9 @@ def create_react_graph(tools: Union[Sequence[BaseTool], BaseTool], agent_use: st
 
 	prompt = ChatPromptTemplate.from_messages(
     	[("system", f"""
-			you are an AI assistant for {agent_use}. To come up with the best answer, 
+			You are an AI assistant for {agent_use}. To come up with the best answer, 
 			use relevant tools that are provided for you. Avoid giving any weird answer. 
+			{added_prompt}
 			"""), ("human", "{messages}")])
 
 	if model is None:
@@ -141,7 +143,13 @@ class Assistant(Callable):
 				self.config = {"configurable": {"thread_id": thread}}
 			self.runnable = runnable.compile(checkpointer = memory) 
 	
-	def _run_chat_mode(self):
+	def _get_last_message(self, value: Union[List, Dict]):
+		if isinstance(value, list):
+			return value[-1]
+		elif isinstance(value, dict):
+			return value['messages'][-1]
+	
+	def _run_chat_mode(self, stream_mode: Literal['updates', 'values'] = 'updates'):
 		while True:
 			user_input = input("User: ")
 			if user_input.lower() in ["quit", "exit", "q"]:
@@ -150,27 +158,29 @@ class Assistant(Callable):
 			# note that with stream mode = values then value will be a list
 			# if stream_mode = None then it will be a dictionary  
 			for event in self.runnable.stream({"messages":[("user", user_input)]}, 
-						self.config, stream_mode = 'values'):
+						self.config, stream_mode = stream_mode):
 				for value in event.values():
-					if isinstance(value[-1], BaseMessage):
-						if value[-1].content == "":
+					last_message = self._get_last_message(value)
+					if isinstance(last_message, BaseMessage):
+						if last_message.content == "":
 							print("Assistant: I am thinking... wait!")
 						else:
-							print("Assistant:", value[-1].content)
+							print("Assistant:", last_message.content)
 	
-	def _run_single_shot_mode(self, query: str) -> None:
+	def _run_single_shot_mode(self, query: str, stream_mode: Literal['updates', 'values'] = 'updates') -> None:
 		inputs  = {"messages": [query]}
-		output = self.runnable.invoke(inputs, stream_mode = 'values')
+		output = self.runnable.invoke(inputs, stream_mode = stream_mode)
 		pprint(output["messages"][-1].content)
 
-	def __call__(self, chat: bool = True, query: Optional[str] = None) -> None:
+	def __call__(self, chat: bool = True,
+			  	 query: Optional[str] = None, stream_mode: Literal['updates', 'values'] = 'updates') -> None:
 		if not chat and query is None:
 			raise ValueError("chat mode is False so a query is needed! ") 
 
 		if chat:
-			self._run_chat_mode()
+			self._run_chat_mode(stream_mode = stream_mode)
 		else:
-			self._run_single_shot_mode(query)
+			self._run_single_shot_mode(query, stream_mode = stream_mode)
 	
 	@classmethod
 	def from_graph(cls, graph: Union[StateGraph, CompiledGraph], thread: int = 1) -> Assist:

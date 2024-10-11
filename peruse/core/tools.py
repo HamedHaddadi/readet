@@ -15,12 +15,12 @@ from arxiv import Search as ArSearch
 from arxiv import Client as ArClient    
 from serpapi import Client 
 from semanticscholar import SemanticScholar 
-from langchain.pydantic_v1 import BaseModel, Field, root_validator
+from pydantic import BaseModel, Field, root_validator
 from langchain_core.tools import BaseTool, tool  
 from langchain_core.retrievers import BaseRetriever 
 from langchain_core.prompts import BasePromptTemplate, PromptTemplate, format_document  
 from langchain_community.document_loaders import pdf 
-from typing import Optional, Any, Dict, Union, List, Sequence   
+from typing import Literal, Optional, Any, Dict, Union, List, Sequence   
 from urllib.request import urlretrieve  
 from . summarizers import SUMMARIZERS
 from . rags import RAGS 
@@ -345,6 +345,20 @@ class PDFDownloadTool(BaseTool):
 	def _run(self, url:str, name:str):
 		self.downloader.run(url, name)
 
+# ### summarizer BaseModel and BaseTools ### #
+class PDFSummary(BaseModel):
+	summarizer: Any 
+	summarizer_type: Literal['plain'] = 'plain'
+	chat_model: Literal['openai-gpt-4o', 'openai-chat'] = 'openai-chat'
+
+	@root_validator(pre = True)
+	def setup_summarizer(cls, values: Dict) -> Dict:
+		values['summarizer'] = SUMMARIZERS[values.get('summarizer_type', 'plain')](chat_model = values.get('chat_model', 'openai-chat'))
+		return values 
+	
+	def run(self, pdf_file: str) -> str:
+		return self.summarizer(pdf_file)
+
 class PDFSummaryTool(BaseTool):
 	"""
 	Tool that generates a summary of all pdf files stored in a directory (save_path)
@@ -352,21 +366,35 @@ class PDFSummaryTool(BaseTool):
 	"""
 	name: str = "pdf_summary_tool"
 	description: str = """
-		this tool is summary builder. Useful when you are asked to prepare a summary of pdf files
-			stored in a directory and appending the summaries to a .txt file
+		this tool is a summary builder. Useful when you are asked to prepare a summary of files
+			and appending the summaries to a .txt file
 	"""
 	save_path: str = Field(description = "path to the storing directory")
+	to_file: bool = Field(description = "if True, the summary is written to a file", default = True)
+	summarizer: PDFSummary = Field(description = "the summarizer model")
 
-	def _run(self) -> None:
+	def _write_to_file(self, summary: str) -> None:
+		with open(path.join(self.save_path, 'summaries.txt'), 'a') as f:
+			f.write(summary)
+			f.write("\n")
+			f.write('******* . ******* \n')
+
+	def _run(self) -> Union[str, None]:
 		pdf_files =[path.join(self.save_path, pdf_file) for pdf_file in listdir(self.save_path) if '.pdf' in pdf_file]
-		sum_chain = SUMMARIZERS["plain"](chat_model = 'openai-chat')
+		summaries = []
 		if len(pdf_files) > 0:
 			for pdf_file in tqdm(pdf_files):
-				summary = sum_chain(pdf_file)
-				with open(path.join(self.save_path, 'summaries.txt'), 'a') as f:
-					f.write(summary)
-					f.write("\n")
-					f.write('******* . ******* \n')
+				summary = self.summarizer.run(pdf_file)
+				if summary != "" and self.to_file:
+					self._write_to_file(summary)
+				else:
+					summaries.append(summary)
+			if len(summaries) > 0:
+				return '******\n'.join(summaries)
+			else:
+				return None 
+		else:
+			return None 
 
 class ListFilesTool(BaseTool):
 	"""
@@ -446,7 +474,7 @@ class RAGTool(BaseTool):
 	"""
 	Tool that uses Retrieval Augmented Generation to query a pdf file
 	"""
-	name = "rag_tool"
+	name: str = "rag_tool"
 	description: str = """
 		A tool to query a pdf file. Useful when you are asked to query a
 			pdf document
@@ -473,8 +501,8 @@ class QueryKeywordsTool(BaseTool):
 		to query a pdf file using the keywords that are extracted 
 		from the pdf.
 	"""
-	name = "query_keywords_tool"
-	description = """
+	name: str = "query_keywords_tool"
+	description: str = """
 		A tool to query pdf files using keywords that are extracted from the pdf file 
 	"""
 	extractor: ExtractKeywords 
@@ -493,7 +521,6 @@ class QueryKeywordsTool(BaseTool):
 # A tool to extract keywords from a pdf file and  	#
 # extract keywords and query the pdf using keywords #
 # ##############################################    #
-
 class GistToFileTool(BaseTool):
 	"""
 	This tool uses keyword extractor, summarizer and retrieval augmented generation
@@ -501,8 +528,8 @@ class GistToFileTool(BaseTool):
 	It first lists all pdf files that are stored in a directory and then it 
 		queries them one by one. 
 	"""
-	name = "query_by_keywords_store_to_file"
-	description = """
+	name: str =  "query_by_keywords_store_to_file"
+	description: str =  """
 		A tool to query pdf files using keywords that are extracted from the pdf file
 			and writing the results to a text file. Use this tool when you are asked to 
 			query pdf files using the keywords. 
@@ -530,7 +557,9 @@ class GistToFileTool(BaseTool):
 			f.write('\n')
 			f.write(f"*** KEY INFORMATION ***\n")
 			f.write('\n'.join([f"{key} : {query_results} \n" 
-				for key, query_results in query_result.items()]))
+				for key, query_results in query_result.items() if query_results is not None]))
+			f.write(f'*** no information could be obtained about the following keywords ***: \n')
+			f.write(','.join([key for key in query_result.keys() if key is None]))
 			f.write('**** >>> <<<   ****')
 	
 	get_title = staticmethod(lambda file_name: Path(file_name).name.split('.pdf')[0])
@@ -538,7 +567,7 @@ class GistToFileTool(BaseTool):
 	def _run(self) -> str:
 		try:
 			summarizer = SUMMARIZERS[self.summarizer_type]()
-			for pdf_file in self.pdf_files:
+			for pdf_file in tqdm(self.pdf_files):
 				title = self.get_title(pdf_file)
 				rag = RAGS[self.rag_type](pdf_file)
 				rag.build()
@@ -547,12 +576,12 @@ class GistToFileTool(BaseTool):
 				query_results = {key: None for key in keywords.split(',')}
 				for keyword in query_results.keys():
 					query = f"what does the manuscript say about {keyword} ?"
-					query_results[keyword] = rag.run(query)
+					results = rag.run(query)
+					query_results[keyword] = results
 				self._write_to_file(title, summary, query_results)
 			return "keywords extraction, summary building and output to text file suucessful"
 		except Exception as e:
-			return f"encountered an error {sys.exc_info()[0]}"
-
+			pass 
 
 
 # #### Charts and Plot Tools #### #
@@ -576,38 +605,8 @@ class BarChart(BaseModel):
 		fig.layout.xaxis.tickfont.size = 15
 		plotly.offline.plot(fig, filename='search_results.html')		
 	
-# #### The following tools are useful when Args need not to be passed at instantiation #### #
-@tool 
-def download_file(url: str, save_path: str, name: str) -> str:
-    """
-    this function takes url to the pdf file, a path in which the pdf is stored and a name.
-	Then it downloads and saves the pdf file. 
-    it saves the pdf file under the name name.pdf! name can be a string of numbers or a string and is one of the inputs to this function. 
-    Use this tool when you are asked to download a pdf. if you could not download the pdf file, simply pass 
-    """
-    try:
-        urlretrieve(url, os.path.join(save_path, str(name) + '.pdf'))
-    except:
-        return str(name) 
 
-@tool 
-def summarizer_tool(save_path: str) -> Union[None,str]:
-	"""
-    this function prepares a summary of all pdf files that are stored in the save_path and
-        appends all summaries to a .txt file called summary.txt. use this tool when you are asked to 
-            prepare a summary of all pdf files
-    """
-	pdf_files = [path.join(save_path, pdf_file) for pdf_file in listdir(save_path) if '.pdf' in pdf_file]
-	sum_chain = PlainSummarizer(chat_model = 'openai-chat')
-	print('pdf file is ', pdf_files)
-	if len(pdf_files) > 0:
-		for pdf_file in tqdm(pdf_files):
-			summary = sum_chain(pdf_file)
-			with open(path.join(save_path, 'summaries.txt'), 'a') as f:
-				f.write(summary)
-				f.write("\n")
-	else:
-		return "was not able to summarize"
+
 
 
 
