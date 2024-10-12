@@ -1,6 +1,8 @@
 # Generate classes and functions to run all chatbots #
-from typing import (TypedDict, Dict, Annotated, List, Optional, Literal, TypeVar, Sequence, Union)
+from typing import (TypedDict, Dict, Annotated, List, Tuple, Optional, Literal, TypeVar, Sequence, Union)
 from pprint import pprint 
+import operator 
+from pydantic import BaseModel, Field 
 from .. utils import models
 from .. core import tools as peruse_tools   
 from . import base 
@@ -11,10 +13,10 @@ from langgraph.graph import START, END, StateGraph, add_messages
 from langgraph.graph.message import add_messages 
 from langgraph.managed import IsLastStep 
 from langchain_core.language_models import LanguageModelLike 
-from langchain_core.messages import ToolMessage, BaseMessage 
+from langchain_core.messages import ToolMessage, BaseMessage, HumanMessage
 from langchain_core.runnables import RunnableLambda, Runnable
 from langchain_core.tools import BaseTool   
-from langgraph.prebuilt import ToolNode 
+from langgraph.prebuilt import ToolNode, create_react_agent 
 from langgraph.graph.graph import CompiledGraph 
 from langgraph.checkpoint.memory import MemorySaver 
 from collections.abc import Callable 
@@ -122,6 +124,165 @@ def create_react_graph(tools: Union[Sequence[BaseTool], BaseTool], agent_use: st
 		return workflow.compile()
 	else:
 		return workflow 
+
+# ########################### #
+# Plan and execute graph 	  #
+# ########################### #
+
+class PlanExecuteState(TypedDict):
+	"""The state of the plan and execute graph"""
+	input: str 
+	plan: List[str]
+	past_steps: Annotated[List[Tuple], add_messages]
+
+class Plan(BaseModel):
+	"""The plan of the task"""
+	steps: List[str] = Field(description = """different steps to follow in order to complete the task.
+			should be in sorted order""")
+
+class Response(BaseModel):
+	"""The response of the user"""
+	response: str = Field(description = "The final respone to the user")
+
+class Action(BaseModel):
+	"""The action to be taken"""
+	action: Union[Response, Plan] = Field(description = """ Action to perform. If you want to respond to user, 
+			use Response. If you want to use tools to come up with the final answer, use Plan""") 
+
+class PlanExecute:
+	"""
+	Class for planning and executing a task
+	different agents are used for planning and executing the task
+	attribuites:
+		executor_agent: the agent for executing the task
+		planner_agent: the agent for planning the task 
+	each agent can be invoked separately to test 
+	"""
+	def __init__(self, tools: Union[List[BaseTool], BaseTool], 
+					executor_chat_model: str = 'openai-gpt-4o', 
+						other_chat_model: str = 'openai-gpt-4o-mini'):
+		
+		self.executor_agent = None 
+		self.planner_agent = None 
+		self.replanner_agent = None 
+		self.graph = None 
+
+		self._configure_executor(tools, executor_chat_model)
+		self._configure_planner(other_chat_model)
+		self._configure_replanner(other_chat_model)
+		self._compiled = False 
+
+	@property
+	def compiled(self) -> bool:
+		return self._compiled
+
+	@compiled.setter
+	def compiled(self, value: bool):
+		if self._compiled is False and value is True:
+			self._compiled = True 
+
+	def _configure_executor(self, tools: Union[List[BaseTool], BaseTool], 
+							executor_chat_model: str):
+		if isinstance(tools, BaseTool):			
+			tools = [tools]
+		executor_prompt = ChatPromptTemplate.from_messages([
+			("system", """
+			You are a helpful AI assistant. 
+			You are given a task and a set of tools to complete the task.
+			"""), ("human", "{messages}")])
+		executor_llm = models.configure_chat_model(executor_chat_model, temperature = 0)
+		self.executor_agent = create_react_agent(executor_llm, tools, state_modifier = executor_prompt)
+	
+	def _configure_planner(self, other_chat_model: str):
+		planner_prompt = ChatPromptTemplate.from_messages([(
+            "system", """For the given objective, come up with a simple step by step plan. 
+			This plan should involve individual tasks, that if executed correctly will result in the correct answer. 
+			Do not add any superfluous steps. The result of the final step should be the final answer. 
+			Make sure that each step has all the information needed - do not skip steps."""),
+			("placeholder", "{messages}")])
+		planner_llm = models.configure_chat_model(other_chat_model, temperature = 0)
+		self.planner_agent = planner_prompt | planner_llm.with_structured_output(Plan) 
+	
+	def _configure_replanner(self, other_chat_model: str):
+		replanner_prompt = ChatPromptTemplate.from_template("""For the given objective, 
+			come up with a simple step by step plan. 
+			This plan should involve individual tasks, that if executed correctly will yield the correct answer. 
+			Do not add any superfluous steps. The result of the final step should be the final answer. 
+			Make sure that each step has all the information needed - do not skip steps.
+			Your objective was this:
+			{input}
+			Your original plan was this:
+			{plan}
+			You have currently done the follow steps:
+			{past_steps}
+			Update your plan accordingly. If no more steps are needed and you can return to the user, 
+			then respond with that. Otherwise, fill out the plan. Only add steps to the plan that still NEED to be done. 
+			Do not return previously done steps as part of the plan.""")
+		replanner_llm = models.configure_chat_model(other_chat_model, temperature = 0)
+		self._replanner_agent = replanner_prompt | replanner_llm.with_structured_output(Action) 
+
+	def _execute_step(self, state: PlanExecuteState) -> Dict:
+		plan = state["plan"]
+		all_plans = "\n".join(f"{i+1}. {step}" for i, step in enumerate(plan))
+		tasks = f"""For the following plans: {all_plans} \n\n You are tasked with executing step {1}, {plan[0]}"""
+		response = self.executor_agent.invoke({"messages": [HumanMessage(content = tasks)]})
+		return {"past_steps": [(plan[0], response["messages"][-1].content)]}
+	
+	def _plan_step(self, state: PlanExecuteState) -> Dict:
+		plan = self.planner_agent.invoke({"messages": [HumanMessage(content = state["input"])]})
+		return {"plan": plan.steps}
+	
+	def _replan_step(self, state: PlanExecuteState) -> Dict:
+		results = self.replanner_agent.invoke(state)
+		if isinstance(results.action, Response):
+			return {"response": results.action.response}
+		else:
+			return {"plan": results.action.steps}
+
+	def _should_end(self, state: PlanExecuteState) -> str:
+		if "response" in state and state["response"] is not None:
+			return END 
+		else:
+			return "agent"
+	
+	def build(self, compile: bool = True) -> Union[StateGraph, CompiledGraph]:
+		workflow = StateGraph(PlanExecuteState)
+		workflow.add_node("agent", self._execute_step)
+		workflow.add_node("planner", self._plan_step)
+		workflow.add_node("replannner", self._replan_step)
+		workflow.set_entry_point("planner")
+		workflow.add_edge("planner", "agent")
+		workflow.add_edge("agent", "replannner")
+		workflow.add_conditional_edges("replannner", self._should_end, {"agent": "agent", END: END})
+		
+		if compile:
+			self.graph = workflow.compile()
+			self._compiled = True 
+		else:
+			self.graph = workflow 
+		return self.graph 
+
+
+
+
+
+
+
+
+
+
+
+	
+
+	
+
+
+
+
+
+
+
+
 	
 # General assistante class to run a graph 
 Assist = TypeVar('Assist', bound = "Assistant")
