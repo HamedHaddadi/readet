@@ -133,7 +133,8 @@ class PlanExecuteState(TypedDict):
 	"""The state of the plan and execute graph"""
 	input: str 
 	plan: List[str]
-	past_steps: Annotated[List[Tuple], add_messages]
+	past_steps: Annotated[List[Tuple], operator.add]
+	response: str 
 
 class Plan(BaseModel):
 	"""The plan of the task"""
@@ -160,7 +161,7 @@ class PlanExecute:
 	"""
 	def __init__(self, tools: Union[List[BaseTool], BaseTool], 
 					executor_chat_model: str = 'openai-gpt-4o', 
-						other_chat_model: str = 'openai-gpt-4o-mini'):
+						other_chat_model: str = 'openai-gpt-4o'):
 		
 		self.executor_agent = None 
 		self.planner_agent = None 
@@ -189,7 +190,7 @@ class PlanExecute:
 			("system", """
 			You are a helpful AI assistant. 
 			You are given a task and a set of tools to complete the task.
-			"""), ("human", "{messages}")])
+			"""), ("placeholder", "{messages}")])
 		executor_llm = models.configure_chat_model(executor_chat_model, temperature = 0)
 		self.executor_agent = create_react_agent(executor_llm, tools, state_modifier = executor_prompt)
 	
@@ -219,31 +220,28 @@ class PlanExecute:
 			then respond with that. Otherwise, fill out the plan. Only add steps to the plan that still NEED to be done. 
 			Do not return previously done steps as part of the plan.""")
 		replanner_llm = models.configure_chat_model(other_chat_model, temperature = 0)
-		self._replanner_agent = replanner_prompt | replanner_llm.with_structured_output(Action) 
+		self.replanner_agent = replanner_prompt | replanner_llm.with_structured_output(Action) 
 
-	def _execute_step(self, state: PlanExecuteState) -> Dict:
+	async def _execute_step(self, state: PlanExecuteState) -> Dict:
 		plan = state["plan"]
 		all_plans = "\n".join(f"{i+1}. {step}" for i, step in enumerate(plan))
 		tasks = f"""For the following plans: {all_plans} \n\n You are tasked with executing step {1}, {plan[0]}"""
-		response = self.executor_agent.invoke({"messages": [HumanMessage(content = tasks)]})
+		response = await self.executor_agent.ainvoke({"messages": [HumanMessage(content = tasks)]})
 		return {"past_steps": [(plan[0], response["messages"][-1].content)]}
 	
-	def _plan_step(self, state: PlanExecuteState) -> Dict:
-		plan = self.planner_agent.invoke({"messages": [HumanMessage(content = state["input"])]})
+	async def _plan_step(self, state: PlanExecuteState) -> Dict:
+		plan = await self.planner_agent.ainvoke({"messages": [HumanMessage(content = state["input"])]})
 		return {"plan": plan.steps}
 	
-	def _replan_step(self, state: PlanExecuteState) -> Dict:
-		results = self.replanner_agent.invoke(state)
+	async def _replan_step(self, state: PlanExecuteState) -> Dict:
+		results = await self.replanner_agent.ainvoke(state)
 		if isinstance(results.action, Response):
 			return {"response": results.action.response}
 		else:
 			return {"plan": results.action.steps}
 
-	def _should_end(self, state: PlanExecuteState) -> str:
-		if "response" in state and state["response"] is not None:
-			return END 
-		else:
-			return "agent"
+	def _should_end(self, state: PlanExecuteState):
+		return END if "response" in state and state["response"] else "agent"
 	
 	def build(self, compile: bool = True) -> Union[StateGraph, CompiledGraph]:
 		workflow = StateGraph(PlanExecuteState)
@@ -261,6 +259,14 @@ class PlanExecute:
 		else:
 			self.graph = workflow 
 		return self.graph 
+	
+	def _run_single_shot(self, query: str) -> None:
+		inputs = {"input": query}
+		output = self.graph.invoke(inputs)
+		pprint(output["response"])
+	
+	def _run_stream(self, query: str) -> None:
+		pass 
 
 
 
