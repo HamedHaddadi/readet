@@ -157,12 +157,27 @@ class PlanExecute:
 	attribuites:
 		executor_agent: the agent for executing the task
 		planner_agent: the agent for planning the task 
-	each agent can be invoked separately to test 
+		replanner_agent: the agent for replanning the task
+		graph: the graph of the plan and execute
+		async: boolean for async mode	
+	each agent can be invoked separately to test output 
+	the best way to run this tool is using run method. But the graph can be compiled and used within a larger graph. 
+	
+	How to use:
+		plan_execute = PlanExecute(tools, executor_chat_model, other_chat_model, async_mode)
+		plan_execute.run(query)
+		tools: a list of tools or a single tool. 
+		executor_chat_model: the chat model for the executor agent
+		other_chat_model: the chat model for the planner and replanner agents
+		async_mode: boolean for async mode. If true then the run method is async. 
+	
 	"""
 	def __init__(self, tools: Union[List[BaseTool], BaseTool], 
 					executor_chat_model: str = 'openai-gpt-4o', 
-						other_chat_model: str = 'openai-gpt-4o'):
+						other_chat_model: str = 'openai-gpt-4o', 
+							async_mode: bool = True):
 		
+		self._async = async_mode 
 		self.executor_agent = None 
 		self.planner_agent = None 
 		self.replanner_agent = None 
@@ -171,7 +186,17 @@ class PlanExecute:
 		self._configure_executor(tools, executor_chat_model)
 		self._configure_planner(other_chat_model)
 		self._configure_replanner(other_chat_model)
-		self._compiled = False 
+		self._compiled = False
+		self._built = False 
+
+	@property
+	def built(self) -> bool:
+		return self._built 
+
+	@built.setter
+	def built(self, value: bool):
+		if self._built is False and value is True:
+			self._built = True 
 
 	@property
 	def compiled(self) -> bool:
@@ -222,19 +247,37 @@ class PlanExecute:
 		replanner_llm = models.configure_chat_model(other_chat_model, temperature = 0)
 		self.replanner_agent = replanner_prompt | replanner_llm.with_structured_output(Action) 
 
-	async def _execute_step(self, state: PlanExecuteState) -> Dict:
+	async def _a_execute_step(self, state: PlanExecuteState) -> Dict:
 		plan = state["plan"]
 		all_plans = "\n".join(f"{i+1}. {step}" for i, step in enumerate(plan))
 		tasks = f"""For the following plans: {all_plans} \n\n You are tasked with executing step {1}, {plan[0]}"""
 		response = await self.executor_agent.ainvoke({"messages": [HumanMessage(content = tasks)]})
 		return {"past_steps": [(plan[0], response["messages"][-1].content)]}
 	
-	async def _plan_step(self, state: PlanExecuteState) -> Dict:
+	def _execute_step(self, state: PlanExecuteState) -> Dict:
+		plan = state["plan"]
+		all_plans = "\n".join(f"{i+1}. {step}" for i, step in enumerate(plan))
+		tasks = f"""For the following plans: {all_plans} \n\n You are tasked with executing step {1}, {plan[0]}"""
+		response = self.executor_agent.invoke({"messages": [HumanMessage(content = tasks)]})
+		return {"past_steps": [(plan[0], response["messages"][-1].content)]}
+	
+	async def _a_plan_step(self, state: PlanExecuteState) -> Dict:
 		plan = await self.planner_agent.ainvoke({"messages": [HumanMessage(content = state["input"])]})
 		return {"plan": plan.steps}
 	
-	async def _replan_step(self, state: PlanExecuteState) -> Dict:
+	def _plan_step(self, state: PlanExecuteState) -> Dict:
+		plan = self.planner_agent.invoke({"messages": [HumanMessage(content = state["input"])]})
+		return {"plan": plan.steps}
+	
+	async def _a_replan_step(self, state: PlanExecuteState) -> Dict:
 		results = await self.replanner_agent.ainvoke(state)
+		if isinstance(results.action, Response):
+			return {"response": results.action.response}
+		else:
+			return {"plan": results.action.steps}
+	
+	def _replan_step(self, state: PlanExecuteState) -> Dict:
+		results = self.replanner_agent.invoke(state)
 		if isinstance(results.action, Response):
 			return {"response": results.action.response}
 		else:
@@ -243,7 +286,7 @@ class PlanExecute:
 	def _should_end(self, state: PlanExecuteState):
 		return END if "response" in state and state["response"] else "agent"
 	
-	def build(self, compile: bool = True) -> Union[StateGraph, CompiledGraph]:
+	def _build(self) -> StateGraph:
 		workflow = StateGraph(PlanExecuteState)
 		workflow.add_node("agent", self._execute_step)
 		workflow.add_node("planner", self._plan_step)
@@ -252,36 +295,51 @@ class PlanExecute:
 		workflow.add_edge("planner", "agent")
 		workflow.add_edge("agent", "replannner")
 		workflow.add_conditional_edges("replannner", self._should_end, {"agent": "agent", END: END})
+		return workflow 
+	
+	def _build_async(self) -> StateGraph:
+		workflow = StateGraph(PlanExecuteState)
+		workflow.add_node("agent", self._a_execute_step)
+		workflow.add_node("planner", self._a_plan_step)
+		workflow.add_node("replannner", self._a_replan_step)
+		workflow.set_entry_point("planner")
+		workflow.add_edge("planner", "agent")
+		workflow.add_edge("agent", "replannner")
+		workflow.add_conditional_edges("replannner", self._should_end, {"agent": "agent", END: END})
+		return workflow 
+	
+	def build(self, compile: bool = True) -> Union[StateGraph, CompiledGraph]:
+		if self._async:
+			graph = self._build_async()
+		else:
+			graph = self._build()
 		
 		if compile:
-			self.graph = workflow.compile()
+			self.graph = graph.compile()
 			self._compiled = True 
 		else:
-			self.graph = workflow 
-		return self.graph 
+			self.graph = graph
+		self._built = True 
+		return self.graph  
 	
-	def _run_single_shot(self, query: str) -> None:
+	
+	def run(self, query: str, recursion_limit: int = 50) -> None:
+		config = {'recusrion_limit': recursion_limit}
 		inputs = {"input": query}
-		output = self.graph.invoke(inputs)
-		pprint(output["response"])
 	
-	def _run_stream(self, query: str) -> None:
-		pass 
+		if not self._built:
+			self.build(compile = True)
 
+		if self._async:
+			iterable = self.graph.astream(inputs, config, stream_mode = 'updates')
+		else:
+			iterable = self.graph.stream(inputs, config, stream_mode = 'updates')
 
-
-
-
-
-
-
-
-
-
-	
-
-	
-
+		for event in iterable:
+				for step, value in event.items():
+					if step != '__end__':
+						pprint(value)
+			
 
 
 
