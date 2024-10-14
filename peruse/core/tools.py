@@ -366,29 +366,31 @@ class PDFSummary(BaseModel):
 
 class PDFSummaryTool(BaseTool):
 	"""
-	Tool that generates a summary of all pdf files stored in a directory (save_path)
-		and writes all summaries in a *.txt files
+	Tool that generates a summary of all pdf files stored in a directory (path_to_files)
+		and writes all summaries in a *.txt file
 	"""
 	name: str = "pdf_summary_tool"
 	description: str = """
 		this tool is a summary builder. Useful when you are asked to prepare a summary of files
 			and appending the summaries to a .txt file
 	"""
-	save_path: str = Field(description = "path to the storing directory")
-	to_file: bool = Field(description = "if True, the summary is written to a file", default = True)
+	path_to_files: str = Field(description = "path to the directory/folder containing pdf fioles")
+	to_file: bool = Field(description = "if True, the summaries are written to a file", default = True)
 	summarizer: PDFSummary = Field(description = "the summarizer model")
 
 	def _write_to_file(self, summary: str) -> None:
-		with open(path.join(self.save_path, 'summaries.txt'), 'a') as f:
+		print('the summary is ', summary)
+		with open(path.join(self.path_to_files, 'summaries.txt'), 'a') as f:
 			f.write(summary)
 			f.write("\n")
 			f.write('******* . ******* \n')
 
 	def _run(self) -> Union[str, None]:
-		pdf_files =[path.join(self.save_path, pdf_file) for pdf_file in listdir(self.save_path) if '.pdf' in pdf_file]
+		pdf_files =[path.join(self.path_to_files, pdf_file) for pdf_file in listdir(self.path_to_files) if '.pdf' in pdf_file]
 		summaries = []
 		if len(pdf_files) > 0:
-			for pdf_file in tqdm(pdf_files):
+			for pdf_file in pdf_files:
+				print('the pdf file is ', pdf_file)
 				summary = self.summarizer.run(pdf_file)
 				if summary != "" and self.to_file:
 					self._write_to_file(summary)
@@ -411,11 +413,11 @@ class ListFilesTool(BaseTool):
 		this tool lists files that are stored in a directory or folder. Useful when you 
 			are asked to list files that are stored in a filder or directory
 	"""
-	save_path: str = Field(description = "path to the storing directory")
+	path_to_files: str = Field(description = "path to the storing directory")
 	suffix: str = Field(default = '.pdf', description ="suffix of the file")
 
 	def _run(self) -> List[Union[str, PathLike]]:
-		files = [path.join(self.save_path, file_name) for file_name in listdir(self.save_path)
+		files = [path.join(self.path_to_files, file_name) for file_name in listdir(self.path_to_files)
 						if self.suffix in file_name]
 		return files 
 
@@ -425,10 +427,12 @@ class Keywords(BaseModel):
 
 class ExtractKeywords(BaseModel):
 	runnable: Any 
+	chat_model: str = Field(description = "the chat model", default = 'openai-gpt-4o-mini')
 
 	@root_validator(pre =True)
 	def generate_runnable_chain(cls, values: Dict) -> Dict:
-		llm = models.configure_chat_model(model = 'openai-gpt-4o-mini', temperature = 0)
+		chat_model = values.get('chat_model', 'openai-gpt-4o-mini')
+		llm = models.configure_chat_model(model = chat_model, temperature = 0)
 		template = prompts.TEMPLATES["extract-keywords"]
 		prompt = PromptTemplate.from_template(template)
 		values['runnable'] = (prompt | llm.with_structured_output(Keywords))
@@ -452,18 +456,18 @@ class ExtractKeywordsTool(BaseTool):
 			Use this tool when you are asked to extract keywords from pdf files that are
 				stored in a path.
 			_run first constructs a list of pdf files  """
-	extractor: ExtractKeywords 
-	files_path: Optional[str] = None 
+	extractor: ExtractKeywords = Field(description = "the keyword extractor model")
+	path_to_files: Optional[str] = None 
 	save_to_file: bool = True 
 
 	def _write_to_file(self, keywords: str, title: str) -> None:
-		with open(path.join(self.files_path, 'extracted_keywords.txt'), 'a+') as f:
+		with open(path.join(self.path_to_files, 'extracted_keywords.txt'), 'a+') as f:
 			f.write(f">>>> {title} <<<< \n")
 			f.write(keywords)
 			f.write(">>>> <<<< \n")
 
 	def _run(self) -> Union[str, None]:
-		pdf_files = [path.join(self.files_path, pdf_file) for pdf_file in listdir(self.files_path) if '.pdf' in pdf_file]
+		pdf_files = [path.join(self.path_to_files, pdf_file) for pdf_file in listdir(self.path_to_files) if '.pdf' in pdf_file]
 		for pdf_file in tqdm(pdf_files):
 			title = Path(pdf_file).name.split('.pdf')[0]
 			keywords = self.extractor.run(pdf_file)
@@ -512,21 +516,12 @@ class QueryKeywordsTool(BaseTool):
 	description: str = """
 		A tool to query pdf files using keywords that are extracted from the pdf file 
 	"""
-	extractor_type: str =  Field(description = "the keyword extractor type", default = 'plain')
 	rag_type: str = Field(description = "the RAG type", default = 'agentic-rag-pdf')
-	extractor: Any = Field(description = "the keyword extractor model")
-	
-	@root_validator(pre = True)
-	def generate_rag(cls, values: Dict) -> Dict:
-		extractor_type = values.get("extractor_type", 'plain')
-		if extractor_type == 'plain':
-			values["extractor"] = ExtractKeywords()
-		else:
-			raise ValueError(f"extractor type {extractor_type} is not supported")
-		return values 
-	
+	extractor: ExtractKeywords = Field(description = "the keyword extractor model")
+	rag_chat_model: str = Field(description = "the chat model for the RAG", default = 'openai-gpt-4o-mini')
+
 	def _run(self, pdf_file: str) -> Union[str, None]:
-		rag = RAGS[self.rag_type](pdf_file)
+		rag = RAGS[self.rag_type](pdf_file, chat_model = self.rag_chat_model)
 		rag.build()
 		keywords = self.extractor.run(pdf_file)
 		results = {key: None for key in keywords.split(',')}
@@ -539,7 +534,7 @@ class QueryKeywordsTool(BaseTool):
 # A tool to extract keywords from a pdf file and  	#
 # extract keywords and query the pdf using keywords #
 # ##############################################    #
-class GistToFileTool(BaseTool):
+class QueryByKeywordsToFileTool(BaseTool):
 	"""
 	This tool uses keyword extractor, summarizer and retrieval augmented generation
 		to summarize and query pdf files and stores the results in a text file. 
@@ -552,11 +547,13 @@ class GistToFileTool(BaseTool):
 			and writing the results to a text file. Use this tool when you are asked to 
 			query pdf files using the keywords. 
 	"""
-	extractor: ExtractKeywords 
+	extractor: ExtractKeywords = Field(description = "the keyword extractor model")
+	summarizer: PDFSummary = Field(description = "the summarizer model")
+	rag_chat_model: str = Field(description = "the chat model for the RAG", default = 'openai-gpt-4o-mini')
+	rag_embedding_model: str = Field(description = "the embedding model for the RAG", default = 'openai-text-embedding-3-large')
 	files_path: str = Field(description = "path to all pdf files")
 	rag_type: str = Field(description = "the RAG model", default = 'agentic-rag-pdf')
-	summarizer_type: str = Field(description = "the summarizer model", default = 'plain')
-	pdf_files: List[str]
+	pdf_files: List[str] = Field(description = "list of pdf files")
 	
 	@root_validator(pre = True)
 	def generate_files(cls, values: Dict) -> Dict:
@@ -584,12 +581,12 @@ class GistToFileTool(BaseTool):
 
 	def _run(self) -> str:
 		try:
-			summarizer = SUMMARIZERS[self.summarizer_type]()
 			for pdf_file in tqdm(self.pdf_files):
 				title = self.get_title(pdf_file)
-				rag = RAGS[self.rag_type](pdf_file)
+				rag = RAGS[self.rag_type](pdf_file, chat_model = self.rag_chat_model, 
+												embedding_model = self.rag_embedding_model)
 				rag.build()
-				summary = summarizer(pdf_file)
+				summary = self.summarizer.run(pdf_file)
 				keywords = self.extractor.run(pdf_file)
 				query_results = {key: None for key in keywords.split(',')}
 				for keyword in query_results.keys():
@@ -600,7 +597,6 @@ class GistToFileTool(BaseTool):
 			return "keywords extraction, summary building and output to text file suucessful"
 		except Exception as e:
 			pass 
-
 
 # #### Charts and Plot Tools #### #
 class BarChart(BaseModel):

@@ -22,28 +22,19 @@ class PlainSummarizer(Callable):
 	generates summary of a text using a simple (prompt | llm) chain
 	it can be instantiated from a pdf file
 	"""
-	def __init__(self, document: Optional[List] = None, chat_model: str = 'openai-gpt-4o-mini', temperature: int = 0):
+	def __init__(self, chat_model: str = 'openai-gpt-4o-mini', temperature: int = 0):
 		llm = models.configure_chat_model(chat_model, temperature = temperature)
 		template = prompts.PLAIN_SUMMARY 
 		prompt = PromptTemplate.from_template(template)
 		self.chain = (prompt | llm)
-		self.document = document 
-	
-	def __call__(self, pdf_file: Union[str, None]) -> str:
-		if self.document is None and pdf_file is not None:
-			self.document = docs.load_and_split_pdf(pdf_file)
-		if self.document is not None:
-			return self.chain.invoke(self.document).content 
+
+	def __call__(self, pdf_file: str) -> str:
+		document = docs.load_and_split_pdf(pdf_file)
+		if document is not None:
+			return self.chain.invoke(document).content 
 		else:
 			return ""
 	
-	@classmethod
-	def from_pdf(cls, pdf_file: str, chat_model: str = 'openai-gpt-4o-mini', temperature: int = 0) -> PS:
-		document = docs.load_and_split_pdf(pdf_file)
-		if document is not None:
-			return cls(document, chat_model = chat_model, temperature = temperature)
-		else:
-			return None 
 
 # refine summarizer
 def refine_pdf_summary(pdf_file: str, chat_model: str = 'openai-gpt-4o-mini', 
@@ -90,25 +81,23 @@ class MapReduceSummary(Callable):
     						document_variable_name = 'docs', 
     							return_intermediate_steps = False)
 	
-	def __call__(self) -> str:
-		summary = self.map_reduce_chain.invoke(self.split_docs)
-		return summary['output_text']
-	
-	
-	@classmethod 
-	def from_pdf(cls, pdf_file: str, chat_model: str = 'openai-gpt-4o-mini', temperature: int = 0, 
-						chunk_size: int = 1000, chunk_overlap: int = 0, 
-									reduce_max_tokens: int = 4000) -> MR:
+	@staticmethod
+	def _load_and_split_pdf(pdf_file: str, chunk_size: int = 1000, chunk_overlap: int = 0) -> List:
 		documents = docs.load_and_split_pdf(pdf_file, split = False)
 		if documents is not None:
 			text_splitter = CharacterTextSplitter.from_tiktoken_encoder(chunk_size = chunk_size, 
 							chunk_overlap = chunk_overlap)
 			split_docs = text_splitter.split_documents(documents)
-			return cls(split_docs, chat_model = chat_model,
-					 temperature = temperature, reduce_max_tokens = reduce_max_tokens)
+			return split_docs
 		else:
 			return None 
 
+	def __call__(self, pdf_file: str, chunk_size: int = 1000, chunk_overlap: int = 0) -> str:
+		split_docs = self._load_and_split_pdf(pdf_file, chunk_size = chunk_size, 
+											chunk_overlap = chunk_overlap)
+		return self.map_reduce_chain.invoke(split_docs)["output_text"] if split_docs is not None else ""
+
+	
 SUMMARIZERS = {"plain": PlainSummarizer, 
 					"map-reduce": MapReduceSummary}
 

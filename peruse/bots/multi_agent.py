@@ -35,7 +35,8 @@ class Supervisor:
 	"""
 	def __init__(self, agents: Dict[str, Sequence[BaseTool]], model: str = 'openai-gpt-4o-mini'):
 		self.agents = agents 
-		self._compiled = False  
+		self._compiled = False 
+		self._built = False 
 		self.llm = models.configure_chat_model(model, temperature = 0)
 
 		self.agent_names = list(self.agents.keys())
@@ -64,6 +65,15 @@ class Supervisor:
 						 agent_names = ', '.join(self.agent_names))
 	
 	@property 
+	def built(self):
+		return self._built 
+	
+	@built.setter 
+	def built(self, status: bool):
+		if self._built is False and status is True:
+			self._built = True 
+	
+	@property 
 	def compiled(self):
 		return self._compiled 
 	
@@ -88,7 +98,9 @@ class Supervisor:
 		workflow = StateGraph(AgentState)
 		workflow.add_node("supervisor", self._supervisor_agent)
 		for agent_name, tools in self.agents.items():
-			setattr(self, agent_name, create_react_agent(self.llm, tools = [tools]))
+			if not isinstance(tools, list):
+				tools = [tools]
+			setattr(self, agent_name, create_react_agent(self.llm, tools))
 			node = partial(self._agent_node, agent = getattr(self, agent_name), name = agent_name)
 			workflow.add_node(agent_name, node)
 		for agent_name in self.agent_names:
@@ -102,12 +114,19 @@ class Supervisor:
 			self.compiled = True  
 		else:
 			self.graph = workflow
+		self.built = True 
 		return self.graph 
 	
 	def run(self, query: str) -> None:
+		if not self.built:
+			self.build(compile = True)
 		inputs = {"messages": [query]}
 		output = self.graph.invoke(inputs, stream_mode = 'updates')
-		pprint(output["messages"][-1].content)
+		print('the output is ', output)
+		pprint(output[-1].content)
+	
+	def __call__(self, query: str) -> None:
+		self.run(query)
 
 	
 	
