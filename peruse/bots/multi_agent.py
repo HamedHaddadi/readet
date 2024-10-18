@@ -14,13 +14,15 @@ from langgraph.graph.graph import CompiledGraph
 from langgraph.prebuilt import create_react_agent 
 
 from .. utils import models 
-from . base import create_react_graph 
+from . base import ReAct  
+from ..core.tools import get_tool  
 
-
+# ########################################################### #
 class AgentState(TypedDict):
 	messages: Annotated[Sequence[BaseMessage], add_messages]
 	next: str 
 
+# ########################################################### #
 class Supervisor:
 	"""
 	The class create a Supervisor multi-agent patent and returns a Runnable (CompiledGraph)
@@ -34,8 +36,11 @@ class Supervisor:
 	Run or __call__ method execute the graph
 	NOTE: this agent can not be run in a chatbot 
 	"""
-	def __init__(self, agents: Dict[str, Union[Sequence[BaseTool], BaseTool, str, Sequence[str]]], model: str = 'openai-gpt-4o-mini'):
-		self.agents = agents 
+	def __init__(self, agents: Dict[str, Union[Sequence[BaseTool], BaseTool, str, Sequence[str]]], model: str = 'openai-gpt-4o-mini', 
+			  **agents_kwargs):
+		
+		self.agents = None 
+		self._configured_agents(agents, agents_kwargs)
 		self._compiled = False 
 		self._built = False 
 		self.llm = models.configure_chat_model(model, temperature = 0)
@@ -65,6 +70,21 @@ class Supervisor:
 				("system", system_prompt2)]).partial(options = str(self.options),
 						 agent_names = ', '.join(self.agent_names))
 	
+	def _configure_agents(self, agents: Dict[str, Union[Sequence[BaseTool], BaseTool, str, Sequence[str]]], agents_kwargs: Dict):
+		agents = {}
+		for agent_name, tools in agents.items():
+			if isinstance(tools, str):
+				agents[agent_name] = [get_tool(tools, agents_kwargs)]
+			elif isinstance(tools, Sequence) and all(isinstance(tool, str) for tool in tools):
+				agents[agent_name] = [get_tool(tool, agents_kwargs) for tool in tools]
+			elif isinstance(tools, Sequence) and all(isinstance(tool, BaseTool) for tool in tools):
+				agents[agent_name] = tools 
+			elif isinstance(tools, BaseTool):
+				agents[agent_name] = [tools]
+			else:
+				raise ValueError(f"Invalid tools input for agent {agent_name}")
+		self.agents = agents 
+				
 	@property 
 	def built(self):
 		return self._built 
@@ -99,8 +119,6 @@ class Supervisor:
 		workflow = StateGraph(AgentState)
 		workflow.add_node("supervisor", self._supervisor_agent)
 		for agent_name, tools in self.agents.items():
-			if not isinstance(tools, list):
-				tools = [tools]
 			setattr(self, agent_name, create_react_agent(self.llm, tools))
 			node = partial(self._agent_node, agent = getattr(self, agent_name), name = agent_name)
 			workflow.add_node(agent_name, node)

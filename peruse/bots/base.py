@@ -32,7 +32,7 @@ class ReAct:
 	of langgraph.prebuilt
 	tools: a sequence of BaseTool objects or a tool object or a sequence of tool names
 	"""
-	def __init__(self, tools: Union[Sequence[BaseTool], BaseTool, Sequence[str]], agent_use: str = "general assistant", 
+	def __init__(self, tools: Union[Sequence[BaseTool], BaseTool, Sequence[str]], 
 			  chat_model: str = 'openai-gpt-4o-mini',
 			   	added_prompt: str = "you are a helpful AI assistant", **tools_kwargs):
 		
