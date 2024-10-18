@@ -31,9 +31,10 @@ class Supervisor:
 	
 	Return:
 		build() method returns a Runnable(a compiled graph)
-		_build() constructs that graph. each agent can be invoked by its name. 
+	Run or __call__ method execute the graph
+	NOTE: this agent can not be run in a chatbot 
 	"""
-	def __init__(self, agents: Dict[str, Sequence[BaseTool]], model: str = 'openai-gpt-4o-mini'):
+	def __init__(self, agents: Dict[str, Union[Sequence[BaseTool], BaseTool, str, Sequence[str]]], model: str = 'openai-gpt-4o-mini'):
 		self.agents = agents 
 		self._compiled = False 
 		self._built = False 
@@ -122,8 +123,7 @@ class Supervisor:
 			self.build(compile = True)
 		inputs = {"messages": [query]}
 		output = self.graph.invoke(inputs, stream_mode = 'updates')
-		print('the output is ', output)
-		pprint(output[-1].content)
+		print('finished execution of the graph')
 	
 	def __call__(self, query: str) -> None:
 		self.run(query)

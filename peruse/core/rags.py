@@ -85,7 +85,7 @@ class RAGPDF:
 			doc = docs.format_doc_object(doc, self.replacements)
 		splits = self.splitter.split_documents(doc)
 		store = Chroma.from_documents(documents = splits, embedding = self.embedding)
-		retriever = store.as_retriever()
+		retriever = store.as_retriever(search_type = "mmr", k = 4)
 		return ({'context': retriever, 'question': RunnablePassthrough()} | self.prompt | self.llm | self.parser)
 
 # #################################### #

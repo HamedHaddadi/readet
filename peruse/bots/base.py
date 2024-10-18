@@ -22,113 +22,41 @@ from langgraph.checkpoint.memory import MemorySaver
 from collections.abc import Callable 
 
  
-def handle_tool_errors(state: TypedDict) -> Dict:
-	"""
-	function to handle tool errors during tool execution
-	Args:
-		state: the current state of the AI agent which contains AI Messages and tool_calls. 
-	Returns:
-		dict: A dictionary containing error messages for each tool  
-	"""
-	error = state.get("error")
-	tool_calls = state["messages"][-1].tool_calls 
-
-	return {"messages": [ToolMessage(content = f"Error: {repr(error)} \n Take steps to fix errors!", 
-										tool_call_id = tc["id"]) for tc in tool_calls]}
-
-def tool_node_with_error_handling(tools: List) -> ToolNode:
-	"""
-	function to generate tool nodes with error handling mechanism
-	Args:
-		tools: the list of tools
-	Returns:
-		Toolnode with error handling mechanism
-	""" 
-	return ToolNode(tools).with_fallbacks([RunnableLambda(handle_tool_errors)], exception_key = "error")
-
 # ########################### #
 # ReAct graph 				  #
 # ########################## #
 
-class AgentState(TypedDict):
-	"""The state of the agent """
-	messages: Annotated[List, add_messages]
-	is_last_step: IsLastStep
-
-def create_react_graph(tools: Union[Sequence[BaseTool], BaseTool], agent_use: str,  model: Optional[LanguageModelLike] = None, 
-				tool_error_handling: bool = True,  chat_model: str = 'openai-gpt-4o-mini', 
-						compile: bool = True, 
-							added_prompt: str = "") -> Union[StateGraph, CompiledGraph]:
+class ReAct:
 	"""
-	Creates a graph that works with a LLM for performing tool calling. 
-	This function is similar to langgraph create_react_agent 
-	Args:
-		tools: a sequence of BaseTool objects or a tool object which will be added to a list
-		model: LLM model (instance of LanguageModelLike) or None. This argument can be used to input
-			a same LLMs for multiple agents
-		agent_use: a string that shows application of the agent  
-		chat_model: an string which will be used to choose a LLM from 'LangChain' that supports tool calling
-					the default value is 'openai-gpt-4o-mini' 
-		tool_error_handling: boolean for adding fall_back. 
-	Returns:
-		a compiled graph
+	Class for creating a ReAct agent by wrapping create_react_agent
+	of langgraph.prebuilt
+	tools: a sequence of BaseTool objects or a tool object or a sequence of tool names
 	"""
-	if not isinstance(tools, list):
-		tools = [tools]
-
-	prompt = ChatPromptTemplate.from_messages(
-    	[("system", f"""
-			You are an AI assistant for {agent_use}. To come up with the best answer, 
-			use relevant tools that are provided for you. Avoid giving any weird answer. 
-			{added_prompt}
-			"""), ("human", "{messages}")])
-
-	if model is None:
+	def __init__(self, tools: Union[Sequence[BaseTool], BaseTool, Sequence[str]], agent_use: str = "general assistant", 
+			  chat_model: str = 'openai-gpt-4o-mini',
+			   	added_prompt: str = "you are a helpful AI assistant", **tools_kwargs):
+		
+		tools = self._configure_tools(tools, tools_kwargs)
 		model = models.configure_chat_model(chat_model, temperature = 0)
-		model_runnable = prompt | model.bind_tools(tools)
-	else:
-		model_runnable = prompt | model.bind_tools(tools)
-	
-	if tool_error_handling:
-		tool_node = base.tool_node_with_error_handling(tools)
-	else:
-		tool_node = ToolNode(tools)
+		self.runnable = create_react_agent(model, tools, state_modifier = added_prompt)
 
-	# define functions 
-	def route_tools(state: AgentState) -> Literal["tools", "end"]:
-		if isinstance(state, list):
-			ai_message = state[-1]
-		elif messages := state.get("messages", []):
-			ai_message = messages[-1]
-		if not ai_message.tool_calls:
-			return "end"
-		else:
-			return "tools"
-	
-	def call_model(state: AgentState):
-		response = model_runnable.invoke(state["messages"])
-		if state["is_last_step"] and response.tool_calls:
-			return {"messages": [AIMessage(id = response.id, content = "sorry we need more steps")]}
-		return {"messages": [response]}
-	
-	# define the graph 
-	workflow = StateGraph(AgentState)
-	workflow.add_node("model", call_model)
-	workflow.add_node("tools", tool_node)
-	workflow.set_entry_point("model")
-	workflow.add_conditional_edges("model", route_tools, 
-									{"tools": "tools", "end": END})
-	workflow.add_edge("tools", "model")
-	workflow.add_edge(START, "model")
-	if compile:
-		return workflow.compile()
-	else:
-		return workflow 
+	# configure tools 
+	def _configure_tools(self, tools: Union[Sequence[BaseTool], BaseTool, Sequence[str]], tools_kwargs: Dict) -> List[BaseTool]:
+		if isinstance(tools, BaseTool):
+			tools = [tools]
+		elif isinstance(tools, Sequence) and all(isinstance(tool, str) for tool in tools):
+			tools = [peruse_tools.get_tool(tool, tools_kwargs) for tool in tools]
+		return tools 
+
+	def run(self, query: str):
+		self.runnable.invoke({"messages": [HumanMessage(content = query)]})
+
+	def __call__(self, query: str):
+		self.run(query)
 
 # ########################### #
 # Plan and execute graph 	  #
 # ########################### #
-
 class PlanExecuteState(TypedDict):
 	"""The state of the plan and execute graph"""
 	input: str 
@@ -339,15 +267,111 @@ class PlanExecute:
 				for step, value in event.items():
 					if step != '__end__':
 						pprint(value)
-			
 
 
 
+# React graph with error handling mechanism
+def handle_tool_errors(state: TypedDict) -> Dict:
+	"""
+	function to handle tool errors during tool execution
+	Args:
+		state: the current state of the AI agent which contains AI Messages and tool_calls. 
+	Returns:
+		dict: A dictionary containing error messages for each tool  
+	"""
+	error = state.get("error")
+	tool_calls = state["messages"][-1].tool_calls 
+
+	return {"messages": [ToolMessage(content = f"Error: {repr(error)} \n Take steps to fix errors!", 
+										tool_call_id = tc["id"]) for tc in tool_calls]}
+
+def tool_node_with_error_handling(tools: List) -> ToolNode:
+	"""
+	function to generate tool nodes with error handling mechanism
+	Args:
+		tools: the list of tools
+	Returns:
+		Toolnode with error handling mechanism
+	""" 
+	return ToolNode(tools).with_fallbacks([RunnableLambda(handle_tool_errors)], exception_key = "error")
 
 
+class AgentState(TypedDict):
+	"""The state of the agent """
+	messages: Annotated[List, add_messages]
+	is_last_step: IsLastStep
 
+def create_react_graph(tools: Union[Sequence[BaseTool], BaseTool], agent_use: str,  model: Optional[LanguageModelLike] = None, 
+				tool_error_handling: bool = True,  chat_model: str = 'openai-gpt-4o-mini', 
+						compile: bool = True, 
+							added_prompt: str = "") -> Union[StateGraph, CompiledGraph]:
+	"""
+	Creates a graph that works with a LLM for performing tool calling. 
+	This function is similar to langgraph create_react_agent 
+	Args:
+		tools: a sequence of BaseTool objects or a tool object which will be added to a list
+		model: LLM model (instance of LanguageModelLike) or None. This argument can be used to input
+			a same LLMs for multiple agents
+		agent_use: a string that shows application of the agent  
+		chat_model: an string which will be used to choose a LLM from 'LangChain' that supports tool calling
+					the default value is 'openai-gpt-4o-mini' 
+		tool_error_handling: boolean for adding fall_back. 
+	Returns:
+		a compiled graph
+	"""
+	if not isinstance(tools, list):
+		tools = [tools]
 
+	prompt = ChatPromptTemplate.from_messages(
+    	[("system", f"""
+			You are an AI assistant for {agent_use}. To come up with the best answer, 
+			use relevant tools that are provided for you. Avoid giving any weird answer. 
+			{added_prompt}
+			"""), ("human", "{messages}")])
+
+	if model is None:
+		model = models.configure_chat_model(chat_model, temperature = 0)
+		model_runnable = prompt | model.bind_tools(tools)
+	else:
+		model_runnable = prompt | model.bind_tools(tools)
 	
+	if tool_error_handling:
+		tool_node = base.tool_node_with_error_handling(tools)
+	else:
+		tool_node = ToolNode(tools)
+
+	# define functions 
+	def route_tools(state: AgentState) -> Literal["tools", "end"]:
+		if isinstance(state, list):
+			ai_message = state[-1]
+		elif messages := state.get("messages", []):
+			ai_message = messages[-1]
+		if not ai_message.tool_calls:
+			return "end"
+		else:
+			return "tools"
+	
+	def call_model(state: AgentState):
+		response = model_runnable.invoke(state["messages"])
+		if state["is_last_step"] and response.tool_calls:
+			return {"messages": [AIMessage(id = response.id, content = "sorry we need more steps")]}
+		return {"messages": [response]}
+	
+	# define the graph 
+	workflow = StateGraph(AgentState)
+	workflow.add_node("model", call_model)
+	workflow.add_node("tools", tool_node)
+	workflow.set_entry_point("model")
+	workflow.add_conditional_edges("model", route_tools, 
+									{"tools": "tools", "end": END})
+	workflow.add_edge("tools", "model")
+	workflow.add_edge(START, "model")
+	if compile:
+		return workflow.compile()
+	else:
+		return workflow 
+
+
 # General assistante class to run a graph 
 Assist = TypeVar('Assist', bound = "Assistant")
 class Assistant(Callable):

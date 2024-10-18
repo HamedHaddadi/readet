@@ -379,7 +379,6 @@ class PDFSummaryTool(BaseTool):
 	summarizer: PDFSummary = Field(description = "the summarizer model")
 
 	def _write_to_file(self, summary: str) -> None:
-		print('the summary is ', summary)
 		with open(path.join(self.path_to_files, 'summaries.txt'), 'a') as f:
 			f.write(summary)
 			f.write("\n")
@@ -390,7 +389,6 @@ class PDFSummaryTool(BaseTool):
 		summaries = []
 		if len(pdf_files) > 0:
 			for pdf_file in pdf_files:
-				print('the pdf file is ', pdf_file)
 				summary = self.summarizer.run(pdf_file)
 				if summary != "" and self.to_file:
 					self._write_to_file(summary)
@@ -617,7 +615,26 @@ class BarChart(BaseModel):
 		fig.layout.xaxis.titlefont.family = 'Gill Sans'
 		fig.layout.xaxis.titlefont.size = 15
 		fig.layout.xaxis.tickfont.size = 15
-		plotly.offline.plot(fig, filename='search_results.html')		
+		plotly.offline.plot(fig, filename='search_results.html')
+
+
+# helper function to get tools using strings 
+def get_tool(tool_name: str, tools_kwargs: Dict) -> BaseTool:
+	if tool_name == 'arxiv_search':
+		page_size = tools_kwargs.get('page_size', 10)
+		max_results = tools_kwargs.get('max_results', 20)
+		return ArxivTool(api_wrapper = ArxivSearch(page_size = page_size, max_results = max_results))
+	elif tool_name == 'pdf_download':
+		save_path = tools_kwargs.get('save_path', path.join(os.getcwd(), 'pdfs'))
+		return PDFDownloadTool(downloader = PDFDownload(save_path = save_path))
+	elif tool_name == "summarize_pdfs":
+		summarizer_type = tools_kwargs.get('summarizer_type', 'plain')
+		chat_model = tools_kwargs.get('chat_model', 'openai-gpt-4o-mini')
+		return PDFSummaryTool(path_to_files = tools_kwargs.get('save_path', path.join(os.getcwd(), 'pdfs')),
+				summarizer = PDFSummary(summarizer_type = summarizer_type, chat_model = chat_model))
+	else:
+		raise ValueError(f"tool {tool_name} is not found") 
+	
 	
 
 
