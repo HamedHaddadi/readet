@@ -296,81 +296,6 @@ def tool_node_with_error_handling(tools: List) -> ToolNode:
 	return ToolNode(tools).with_fallbacks([RunnableLambda(handle_tool_errors)], exception_key = "error")
 
 
-class AgentState(TypedDict):
-	"""The state of the agent """
-	messages: Annotated[List, add_messages]
-	is_last_step: IsLastStep
-
-def create_react_graph(tools: Union[Sequence[BaseTool], BaseTool], agent_use: str,  model: Optional[LanguageModelLike] = None, 
-				tool_error_handling: bool = True,  chat_model: str = 'openai-gpt-4o-mini', 
-						compile: bool = True, 
-							added_prompt: str = "") -> Union[StateGraph, CompiledGraph]:
-	"""
-	Creates a graph that works with a LLM for performing tool calling. 
-	This function is similar to langgraph create_react_agent 
-	Args:
-		tools: a sequence of BaseTool objects or a tool object which will be added to a list
-		model: LLM model (instance of LanguageModelLike) or None. This argument can be used to input
-			a same LLMs for multiple agents
-		agent_use: a string that shows application of the agent  
-		chat_model: an string which will be used to choose a LLM from 'LangChain' that supports tool calling
-					the default value is 'openai-gpt-4o-mini' 
-		tool_error_handling: boolean for adding fall_back. 
-	Returns:
-		a compiled graph
-	"""
-	if not isinstance(tools, list):
-		tools = [tools]
-
-	prompt = ChatPromptTemplate.from_messages(
-    	[("system", f"""
-			You are an AI assistant for {agent_use}. To come up with the best answer, 
-			use relevant tools that are provided for you. Avoid giving any weird answer. 
-			{added_prompt}
-			"""), ("human", "{messages}")])
-
-	if model is None:
-		model = models.configure_chat_model(chat_model, temperature = 0)
-		model_runnable = prompt | model.bind_tools(tools)
-	else:
-		model_runnable = prompt | model.bind_tools(tools)
-	
-	if tool_error_handling:
-		tool_node = base.tool_node_with_error_handling(tools)
-	else:
-		tool_node = ToolNode(tools)
-
-	# define functions 
-	def route_tools(state: AgentState) -> Literal["tools", "end"]:
-		if isinstance(state, list):
-			ai_message = state[-1]
-		elif messages := state.get("messages", []):
-			ai_message = messages[-1]
-		if not ai_message.tool_calls:
-			return "end"
-		else:
-			return "tools"
-	
-	def call_model(state: AgentState):
-		response = model_runnable.invoke(state["messages"])
-		if state["is_last_step"] and response.tool_calls:
-			return {"messages": [AIMessage(id = response.id, content = "sorry we need more steps")]}
-		return {"messages": [response]}
-	
-	# define the graph 
-	workflow = StateGraph(AgentState)
-	workflow.add_node("model", call_model)
-	workflow.add_node("tools", tool_node)
-	workflow.set_entry_point("model")
-	workflow.add_conditional_edges("model", route_tools, 
-									{"tools": "tools", "end": END})
-	workflow.add_edge("tools", "model")
-	workflow.add_edge(START, "model")
-	if compile:
-		return workflow.compile()
-	else:
-		return workflow 
-
 
 # General assistante class to run a graph 
 Assist = TypeVar('Assist', bound = "Assistant")
@@ -401,7 +326,7 @@ class Assistant(Callable):
 	def _run_chat_mode(self, stream_mode: Literal['updates', 'values'] = 'updates'):
 		while True:
 			user_input = input("User: ")
-			if user_input.lower() in ["quit", "exit", "q"]:
+			if user_input.lower() in ["quit", "exit", "q", "bye", "goodbye"]:
 				print("Ciao!")
 				break 
 			# note that with stream mode = values then value will be a list
@@ -412,7 +337,7 @@ class Assistant(Callable):
 					last_message = self._get_last_message(value)
 					if isinstance(last_message, BaseMessage):
 						if last_message.content == "":
-							print("Assistant: I am thinking... wait!")
+							print("Assistant: I am working... wait!")
 						else:
 							print("Assistant:", last_message.content)
 	

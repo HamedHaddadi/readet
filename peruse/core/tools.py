@@ -20,7 +20,7 @@ from langchain_core.tools import BaseTool, tool
 from langchain_core.retrievers import BaseRetriever 
 from langchain_core.prompts import BasePromptTemplate, PromptTemplate, format_document  
 from langchain_community.document_loaders import pdf 
-from typing import Literal, Optional, Any, Dict, Union, List, Sequence   
+from typing import Literal, Optional, Any, Dict, Union, List, Sequence
 from urllib.request import urlretrieve  
 from . summarizers import SUMMARIZERS
 from . rags import RAGS 
@@ -369,7 +369,7 @@ class PDFSummaryTool(BaseTool):
 	Tool that generates a summary of all pdf files stored in a directory (path_to_files)
 		and writes all summaries in a *.txt file
 	"""
-	name: str = "pdf_summary_tool"
+	name: str = "summary_tool"
 	description: str = """
 		this tool is a summary builder. Useful when you are asked to prepare a summary of files
 			and appending the summaries to a .txt file
@@ -384,22 +384,12 @@ class PDFSummaryTool(BaseTool):
 			f.write("\n")
 			f.write('******* . ******* \n')
 
-	def _run(self) -> Union[str, None]:
-		pdf_files =[path.join(self.path_to_files, pdf_file) for pdf_file in listdir(self.path_to_files) if '.pdf' in pdf_file]
-		summaries = []
-		if len(pdf_files) > 0:
-			for pdf_file in pdf_files:
-				summary = self.summarizer.run(pdf_file)
-				if summary != "" and self.to_file:
-					self._write_to_file(summary)
-				else:
-					summaries.append(summary)
-			if len(summaries) > 0:
-				return '******\n'.join(summaries)
-			else:
-				return None 
-		else:
-			return None 
+	def _run(self, pdf_file: str):	
+		pdf_file = path.join(self.path_to_files, pdf_file)
+		summary = self.summarizer.run(pdf_file)
+		if summary != "":
+			self._write_to_file(summary)
+		
 
 class ListFilesTool(BaseTool):
 	"""
@@ -417,7 +407,7 @@ class ListFilesTool(BaseTool):
 	def _run(self) -> List[Union[str, PathLike]]:
 		files = [path.join(self.path_to_files, file_name) for file_name in listdir(self.path_to_files)
 						if self.suffix in file_name]
-		return files 
+		return files  
 
 # ######### keyword extraction tool ######### #
 class Keywords(BaseModel):
@@ -474,127 +464,48 @@ class ExtractKeywordsTool(BaseTool):
 			else:
 				return keywords 
 
-# ################### #
-# A Plain RAG tool	  #
-# ##################  #
-class RAGTool(BaseTool):
-	"""
-	Tool that uses Retrieval Augmented Generation to query a pdf file
-	"""
-	name: str = "rag_tool"
-	description: str = """
-		A tool to query a pdf file. Useful when you are asked to query a
-			pdf document
-	"""
-	rag: Any = Field(description = "the RAG model")  
-	rag_type: str = Field(description = "the RAG type", default = 'agentic-rag-pdf')
-	pdf_file: str = Field(description = "the pdf file to query")
-
-	@root_validator(pre = True)
-	def generate_rag(cls, values: Dict) -> Dict:
-		pdf_file = values.get("pdf_file")
-		rag_type = values.get("rag_type", 'agentic-rag-pdf')
-		values["rag"] = RAGS[rag_type](pdf_file)
-		return values 
-
-	def _run(self, query: str) -> str:
-		return self.rag(query)
 
 # ############################################### 	#
 # A tool to extract keywords from a pdf file and  	#
 # extract keywords and query the pdf using keywords #
 # ##############################################    #
-class QueryKeywordsTool(BaseTool):
+class QueryByKeywords(BaseTool):
 	"""
-	Tool that uses Keyword extractor and retrieval augmented generation
-		to query a pdf file using the keywords that are extracted 
-		from the pdf.
-	"""
-	name: str = "query_keywords_tool"
-	description: str = """
-		A tool to query pdf files using keywords that are extracted from the pdf file 
-	"""
-	rag_type: str = Field(description = "the RAG type", default = 'agentic-rag-pdf')
-	extractor: ExtractKeywords = Field(description = "the keyword extractor model")
-	rag_chat_model: str = Field(description = "the chat model for the RAG", default = 'openai-gpt-4o-mini')
-
-	def _run(self, pdf_file: str) -> Union[str, None]:
-		rag = RAGS[self.rag_type](pdf_file, chat_model = self.rag_chat_model)
-		rag.build()
-		keywords = self.extractor.run(pdf_file)
-		results = {key: None for key in keywords.split(',')}
-		for keyword in keywords.split(','):
-			query = f"what does this article say about {keyword}"
-			results[keyword] = self.rag(query)
-		return '===== \n'.join([f"***{key} ==> {result} \n" for key, result in results.items()])
-
-# ############################################### 	#
-# A tool to extract keywords from a pdf file and  	#
-# extract keywords and query the pdf using keywords #
-# ##############################################    #
-class QueryByKeywordsToFileTool(BaseTool):
-	"""
-	This tool uses keyword extractor, summarizer and retrieval augmented generation
-		to summarize and query pdf files and stores the results in a text file. 
-	It first lists all pdf files that are stored in a directory and then it 
-		queries them one by one. 
+	This tool uses keyword extractor and retrieval augmented generation
+		to extract keywords from a pdf file and stores the results in a text file
 	"""
 	name: str =  "query_by_keywords_store_to_file"
 	description: str =  """
-		A tool to query pdf files using keywords that are extracted from the pdf file
-			and writing the results to a text file. Use this tool when you are asked to 
-			query pdf files using the keywords. 
+		A tool to ask questions about a document using keywords that are extracted from the text 
+			It also writes the results to a text file. Use this tool when you are asked to 
+			ask questions about a document using keywords. 
 	"""
 	extractor: ExtractKeywords = Field(description = "the keyword extractor model")
-	summarizer: PDFSummary = Field(description = "the summarizer model")
 	rag_chat_model: str = Field(description = "the chat model for the RAG", default = 'openai-gpt-4o-mini')
 	rag_embedding_model: str = Field(description = "the embedding model for the RAG", default = 'openai-text-embedding-3-large')
-	files_path: str = Field(description = "path to all pdf files")
+	path_to_files: str = Field(description = "path to all pdf files")
 	rag_type: str = Field(description = "the RAG model", default = 'agentic-rag-pdf')
-	pdf_files: List[str] = Field(description = "list of pdf files")
-	
-	@root_validator(pre = True)
-	def generate_files(cls, values: Dict) -> Dict:
-		files_path = values.get('files_path')
-		files = [path.join(files_path, file_name) for file_name in listdir(files_path)
-					 if file_name.lower().endswith('.pdf')]
-		values['pdf_files'] = files 
-		return values 
 
-	def _write_to_file(self, title: str, summary: str, query_result: Dict[str, str]) -> None:
-		with open(path.join(self.files_path, 'gist.txt'), 'a+') as f:
-			f.write(f"*** TITLE ***\n")
-			f.write(title.upper() + '\n')
-			f.write(f"*** SUMMARY ***\n")
-			f.write(f'*** {summary} *** \n')
-			f.write('\n')
-			f.write(f"*** KEY INFORMATION ***\n")
-			f.write('\n'.join([f"{key} : {query_results} \n" 
-				for key, query_results in query_result.items() if query_results is not None]))
-			f.write(f'*** no information could be obtained about the following keywords ***: \n')
-			f.write(','.join([key for key in query_result.keys() if key is None]))
-			f.write('**** >>> <<<   ****')
-	
 	get_title = staticmethod(lambda file_name: Path(file_name).name.split('.pdf')[0])
 
-	def _run(self) -> str:
-		try:
-			for pdf_file in tqdm(self.pdf_files):
-				title = self.get_title(pdf_file)
-				rag = RAGS[self.rag_type](pdf_file, chat_model = self.rag_chat_model, 
-												embedding_model = self.rag_embedding_model)
-				rag.build()
-				summary = self.summarizer.run(pdf_file)
-				keywords = self.extractor.run(pdf_file)
-				query_results = {key: None for key in keywords.split(',')}
-				for keyword in query_results.keys():
-					query = f"what does the manuscript say about {keyword} ?"
-					results = rag.run(query)
-					query_results[keyword] = results
-				self._write_to_file(title, summary, query_results)
-			return "keywords extraction, summary building and output to text file suucessful"
-		except Exception as e:
-			pass 
+	def _run(self, pdf_file: str) -> str:
+		pdf_file = path.join(self.path_to_files, pdf_file)
+		title = self.get_title(pdf_file)
+		rag = RAGS[self.rag_type](pdf_file, chat_model = self.rag_chat_model, 
+					embedding_model = self.rag_embedding_model)
+		rag.build()
+		keywords = self.extractor.run(pdf_file)
+		query_results = {key: None for key in keywords.split(',')}
+		f = open(path.join(self.path_to_files, f'gist_of_{title}.txt'), 'a+')
+		f.write(f'***** TITLE: {title.upper()} ***** \n')
+		for keyword in query_results.keys():
+			query = f"what does the manuscript say about {keyword} ?"
+			results = rag.run(query)
+			print(f'>>> {keyword}: {results} \n\n')
+			f.write(f'>>> {keyword}: {results} \n\n')
+			query_results[keyword] = results
+		f.close()
+		return '===== \n'.join([f"***{key} ==> {result} \n" for key, result in query_results.items() if result is not None])
 
 # #### Charts and Plot Tools #### #
 class BarChart(BaseModel):
@@ -624,14 +535,29 @@ def get_tool(tool_name: str, tools_kwargs: Dict) -> BaseTool:
 		page_size = tools_kwargs.get('page_size', 10)
 		max_results = tools_kwargs.get('max_results', 20)
 		return ArxivTool(api_wrapper = ArxivSearch(page_size = page_size, max_results = max_results))
+	
 	elif tool_name == 'pdf_download':
 		save_path = tools_kwargs.get('save_path', path.join(os.getcwd(), 'pdfs'))
 		return PDFDownloadTool(downloader = PDFDownload(save_path = save_path))
+	
 	elif tool_name == "summarize_pdfs":
 		summarizer_type = tools_kwargs.get('summarizer_type', 'plain')
 		chat_model = tools_kwargs.get('chat_model', 'openai-gpt-4o-mini')
 		return PDFSummaryTool(path_to_files = tools_kwargs.get('save_path', path.join(os.getcwd(), 'pdfs')),
 				summarizer = PDFSummary(summarizer_type = summarizer_type, chat_model = chat_model))
+	
+	elif tool_name == "list_files":
+		suffix = tools_kwargs.get('suffix', '.pdf')
+		return ListFilesTool(path_to_files = tools_kwargs.get('save_path', path.join(os.getcwd(), 'pdfs')),
+								suffix = suffix)
+	
+	elif tool_name == "query_by_keywords":
+		return QueryByKeywords(extractor = ExtractKeywords(chat_model = tools_kwargs.get('chat_model', 'openai-gpt-4o-mini')),
+					path_to_files = tools_kwargs.get('save_path', path.join(os.getcwd(), 'pdfs')),
+					rag_type = tools_kwargs.get('rag_type', 'agentic-rag-pdf'),
+					rag_chat_model = tools_kwargs.get('rag_chat_model', 'openai-gpt-4o-mini'),
+					rag_embedding_model = tools_kwargs.get('rag_embedding_model', 'openai-text-embedding-3-large'))
+	
 	else:
 		raise ValueError(f"tool {tool_name} is not found") 
 	

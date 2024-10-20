@@ -2,9 +2,9 @@
 # ################################################## #
 # Prebuilt functions and classes for agentic systems #
 # ################################################## #
-from os import path, makedirs 
+from os import path, makedirs, PathLike  
 from datetime import datetime  
-from typing import Literal, Union, List, Sequence 
+from typing import Literal, Union, List, Sequence, Optional 
 # langchain, langgraph 
 from langgraph.graph.graph import CompiledGraph 
 from langgraph.graph import StateGraph 
@@ -13,81 +13,42 @@ from langchain_openai import ChatOpenAI
 from langchain_core.runnables import Runnable
 # peruse tools 
 from .. core import tools as peruse_tools 
-from . base import create_react_graph 
+from . base import ReAct, Assistant 
 from . multi_agent import Supervisor
 
-# ########################################################### #
-# search_download_gist_graph: search in the search_in, download the pdf files and generate a gist of the material mentioned in the pdf and
-# 	save them to a .txt file. 
-# ########################################################### #
-def search_download_query_by_keyword_graph(save_path: str, compile: bool = False, 
-		agent_type: Literal['react'] = 'react',
-			search_in: Sequence[str] = ['arxiv'], 
-						max_results: int = 10, rag_type: str = 'agentic-rag-pdf', 
-								summarizer_type: str = 'plain') -> Union[StateGraph, CompiledGraph]:
 
-	save_path = path.join(save_path, f'{search_in}_search_download_query_results_on_' + datetime.now().strftime('%Y-%m-%d-%H-%M'))
-	if not path.exists(save_path):
-		makedirs(save_path)
-	
-	search_tools = []
-	if search_in == 'scholar':
-		search_tools.append(peruse_tools.GoogleScholarTool(api_wrapper = peruse_tools.GoogleScholarSearch(top_k_results = max_results)))
-	elif search_in == 'patents':
-		search_tools.append(peruse_tools.GooglePatentTool(api_wrapper = peruse_tools.PatentSearch(max_number_of_pages = max_results)))
-	elif search_in == 'arxiv':
-		search_tools.append(peruse_tools.ArxivTool(api_wrapper = peruse_tools.ArxivSearch(max_results = max_results)))
-
-	download_tool = peruse_tools.PDFDownloadTool(downloader = peruse_tools.PDFDownload(save_path = save_path)) 
-	gist_to_file_tool = peruse_tools.GistToFileTool(files_path = save_path, extractor = peruse_tools.ExtractKeywords(), 
-						rag_type = rag_type, summarizer_type = summarizer_type) 	
-	tools = [download_tool, gist_to_file_tool]
-	tools.extend(search_tools)
-	
-	if agent_type == "react":
-		return create_react_graph(tools, agent_use = f"""search in {search_in},
-					 download the pdf files and generate a gist of the material mentioned in the pdf and
-					 	save them to a .txt file. """, compile = compile)
-	
-# ########################################################### #
-# search_download_summary_graph: search in the search_in, download the pdf files and generate a summary of the material mentioned in the pdf and
-# 	save them to a .txt file. 
-# ########################################################### #
-def search_download_summary_graph(save_path: str, compile: bool = False, 
-		agent_type: Literal['react', 'supervisor'] = 'react', search_in: Sequence[str] = ['arxiv'], 
-			max_results: int = 10,  summarizer_type: Literal['plain'] = 'plain', 
-				chat_model: str = 'openai-gpt-4o-mini', 
-					added_prompt: str = "") -> Union[StateGraph, CompiledGraph, Runnable]:
+class ResearchAssistant:
 	"""
-	search in the search_in, download the pdf files and generate a summary of the material mentioned in the pdf and
-		save them to a .txt file. 
+	Assistant class the helps in search, download and summarzing pdf files
 	"""
-	save_path = path.join(save_path, f'{search_in}_search_download_query_results_on_' + datetime.now().strftime('%Y-%m-%d-%H-%M'))
-	if not path.exists(save_path):
-		makedirs(save_path)
-	
-	search_tools = []
-	if search_in == 'scholar':
-		search_tools.append(peruse_tools.GoogleScholarTool(api_wrapper = peruse_tools.GoogleScholarSearch(top_k_results = max_results)))
-	elif search_in == 'patents':
-		search_tools.append(peruse_tools.GooglePatentTool(api_wrapper = peruse_tools.PatentSearch(max_number_of_pages = max_results),
-				save_path = save_path))
-	elif search_in == 'arxiv':
-		search_tools.append(peruse_tools.ArxivTool(api_wrapper = peruse_tools.ArxivSearch(max_results = max_results)))
+	def __init__(self, save_in: Union[str, PathLike], 
+			  	search_in: Sequence[str] = ['arxiv']) -> None:
+		self.save_in = save_in 
+		self.search_assistant = None 
+		self.summary_assistant = None 
 
-	download_tool = peruse_tools.PDFDownloadTool(downloader = peruse_tools.PDFDownload(save_path = save_path))
-	summary_tool = peruse_tools.PDFSummaryTool(path_to_files= save_path, to_file = True,
-		summarizer = peruse_tools.PDFSummary(chat_model = chat_model, summarizer_type = summarizer_type))	 
+		self._configure_search_assistant(search_in)
+		self._configure_summary_assistant()
+
+	def _configure_search_assistant(self, search_in: Sequence[str]) -> None:
+		added_prompt = f"""you are a helpful assistant that helps in searching for scientific papers
+		 	in {', '.join(search_in)} and downloading them to {self.save_in}"""
+		tools = [search + '_search' for search in search_in] + ['pdf_download', 'list_files']
+		search_agent = ReAct(tools, added_prompt = added_prompt, save_path = self.save_in)
+		self.search_assistant = Assistant.from_graph(search_agent.runnable)
 	
-	tools = [download_tool, summary_tool]
-	tools.extend(search_tools)
-	if agent_type == "react":
-		model = ChatOpenAI(model = "gpt-4o-mini", temperature = 0)
-		return create_react_agent(model, tools = tools)
+	def _configure_summary_assistant(self) -> None:
+		added_prompt = f"""you are a helpful assistant that summarizes pdf files; remember to
+			give a response using tools that you have. Do not speculate"""
+		tools = ['summarize_pdfs', 'list_files']
+		summary_agent = ReAct(tools, added_prompt = added_prompt, save_path = self.save_in)
+		self.summary_assistant = Assistant.from_graph(summary_agent.runnable)
 	
-	elif agent_type == "supervisor":
-		agents = {'search': search_tools, 'download': download_tool, 'summary': summary_tool}
-		sub = Supervisor(agents, model = chat_model)
-		graph = sub.build(compile = compile)
-		return graph 
+	def enable_search(self) -> None:
+		self.search_assistant()
+	
+	def enable_summary(self) -> None:
+		self.summary_assistant()
+
+	
 
