@@ -335,7 +335,7 @@ class Assistant(Callable):
 						self.config, stream_mode = stream_mode):
 				for value in event.values():
 					last_message = self._get_last_message(value)
-					if isinstance(last_message, BaseMessage):
+					if isinstance(last_message, AIMessage):
 						if last_message.content == "":
 							print("Assistant: I am working... wait!")
 						else:

@@ -384,11 +384,12 @@ class PDFSummaryTool(BaseTool):
 			f.write("\n")
 			f.write('******* . ******* \n')
 
-	def _run(self, pdf_file: str):	
+	def _run(self, pdf_file: str) -> str:
 		pdf_file = path.join(self.path_to_files, pdf_file)
 		summary = self.summarizer.run(pdf_file)
 		if summary != "":
 			self._write_to_file(summary)
+			return summary 
 		
 
 class ListFilesTool(BaseTool):
