@@ -28,7 +28,7 @@ pip3 install requirements.txt
 ```
 (if you prefer to set up a virtual environment of course). 
 
-If you like to use this repository, the only class you need is _ResearchAssistant_ from _peruse/bots/prebuilt. 
+If you like to use this repository, the only class you need is _ResearchAssistant_ from _peruse/bots/prebuilt_. 
 
 ### apply and obtain API_Keys
 You will need API keys for the following services: <br/>
