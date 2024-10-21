@@ -326,7 +326,7 @@ class Assistant(Callable):
 	def _run_chat_mode(self, stream_mode: Literal['updates', 'values'] = 'updates'):
 		while True:
 			user_input = input("User: ")
-			if user_input.lower() in ["quit", "exit", "q", "bye", "goodbye"]:
+			if set(user_input.lower().split(' ')).difference(["quit", "exit", "q", "bye", "goodbye"]) != 0:
 				print("Ciao!")
 				break 
 			# note that with stream mode = values then value will be a list

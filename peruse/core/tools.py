@@ -383,15 +383,28 @@ class PDFSummaryTool(BaseTool):
 			f.write(summary)
 			f.write("\n")
 			f.write('******* . ******* \n')
-
-	def _run(self, pdf_file: str) -> str:
+	
+	def _summarize_all(self) -> str:
+		pdf_files = [path.join(self.path_to_files, pdf_file) for pdf_file in listdir(self.path_to_files) if '.pdf' in pdf_file]
+		summaries = []
+		for pdf_file in tqdm(pdf_files):
+			summary = self.summarizer.run(pdf_file)
+			self._write_to_file(summary)
+			summaries.append(summary)
+		return "all summaries are written to the file"
+	
+	def _summarize_one(self, pdf_file: str) -> str:
 		pdf_file = path.join(self.path_to_files, pdf_file)
 		summary = self.summarizer.run(pdf_file)
-		if summary != "":
-			self._write_to_file(summary)
-			return summary 
-		
+		self._write_to_file(summary)
+		return summary 
 
+	def _run(self, pdf_file: str) -> str:
+		if "all" in pdf_file.lower() and not pdf_file.endswith('.pdf'):
+			return self._summarize_all()
+		else:
+			return self._summarize_one(pdf_file)
+		
 class ListFilesTool(BaseTool):
 	"""
 	This tool lists all files stored in a directory or folder. Files must have 
@@ -536,6 +549,10 @@ def get_tool(tool_name: str, tools_kwargs: Dict) -> BaseTool:
 		page_size = tools_kwargs.get('page_size', 10)
 		max_results = tools_kwargs.get('max_results', 20)
 		return ArxivTool(api_wrapper = ArxivSearch(page_size = page_size, max_results = max_results))
+	
+	elif tool_name == 'google_scholar_search':
+		return GoogleScholarTool(api_wrapper = GoogleScholarSearch(top_k_results = tools_kwargs.get('max_results', 20)))
+	
 	
 	elif tool_name == 'pdf_download':
 		save_path = tools_kwargs.get('save_path', path.join(os.getcwd(), 'pdfs'))
