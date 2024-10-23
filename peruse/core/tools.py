@@ -330,9 +330,13 @@ class PDFDownload(BaseModel):
 	def run(self, url: str, name:str) -> Union[None, str]:
 		if '.pdf' not in name:
 			name = '_'.join(name.split(' ')) + '.pdf'
-		try:
-			urlretrieve(url, path.join(self.save_path, name))
-		except:
+		all_files = [file for file in listdir(self.save_path) if '.pdf' in file]
+		if name not in all_files:
+			try:
+				urlretrieve(url, path.join(self.save_path, name))
+			except:
+				return str(name)
+		else:
 			return str(name)
 
 class PDFDownloadTool(BaseTool):
@@ -376,27 +380,41 @@ class PDFSummaryTool(BaseTool):
 	"""
 	path_to_files: str = Field(description = "path to the directory/folder containing pdf fioles")
 	to_file: bool = Field(description = "if True, the summaries are written to a file", default = True)
+	path_to_summaries: Optional[str] = Field(description = "path to the directory/folder to store the summaries", default = None)
 	summarizer: PDFSummary = Field(description = "the summarizer model")
 
-	def _write_to_file(self, summary: str) -> None:
-		with open(path.join(self.path_to_files, 'summaries.txt'), 'a') as f:
+	@root_validator(pre = True)
+	def validate_path_to_summaries(cls, values: Dict) -> Dict:
+		path_to_summaries = path.join(values.get('path_to_files'), 'summaries')
+		if not path.exists(path_to_summaries):
+			makedirs(path_to_summaries)
+		values['path_to_summaries'] = path_to_summaries
+		return values 
+	
+	def _write_to_file(self, summary: str, title: str, all: Literal[True, False] = True) -> None:
+		if all:
+			file_name = 'all_summaries.txt'
+		else:
+			file_name = f'summary of {title}.txt'
+		with open(path.join(self.path_to_summaries, file_name), 'a') as f:
+			f.write(f">>>> {title} <<<< \n")
 			f.write(summary)
 			f.write("\n")
 			f.write('******* . ******* \n')
 	
 	def _summarize_all(self) -> str:
 		pdf_files = [path.join(self.path_to_files, pdf_file) for pdf_file in listdir(self.path_to_files) if '.pdf' in pdf_file]
-		summaries = []
 		for pdf_file in tqdm(pdf_files):
+			title = Path(pdf_file).name.split('.pdf')[0]
 			summary = self.summarizer.run(pdf_file)
-			self._write_to_file(summary)
-			summaries.append(summary)
+			self._write_to_file(summary, title, True)
 		return "all summaries are written to the file"
 	
 	def _summarize_one(self, pdf_file: str) -> str:
 		pdf_file = path.join(self.path_to_files, pdf_file)
 		summary = self.summarizer.run(pdf_file)
-		self._write_to_file(summary)
+		title = Path(pdf_file).name.split('.pdf')[0]
+		self._write_to_file(summary, title, False)
 		return summary 
 
 	def _run(self, pdf_file: str) -> str:
