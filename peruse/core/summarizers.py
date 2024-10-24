@@ -58,11 +58,10 @@ class MapReduceSummary(Callable):
 	uses a MapReduce approach to generate a summary of the input text
 	can be instantiated from pdf files or other texts
 	"""
-	def __init__(self, split_documents: List, chat_model: str = 'openai-gpt-4o-mini',
+	def __init__(self, chat_model: str = 'openai-gpt-4o-mini',
 				 temperature: int = 0, reduce_max_tokens: int = 4000):
 		self.llm = models.configure_chat_model(chat_model, temperature = temperature)
 		self.map_reduce_chain = None 
-		self.split_documents = split_documents 
 		self._configure_chains(reduce_max_tokens = reduce_max_tokens)
 	
 	def _configure_chains(self, reduce_max_tokens: int = 4000) -> None:

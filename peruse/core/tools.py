@@ -113,12 +113,17 @@ class GoogleScholarTool(BaseTool):
         research papers from Google Scholar
         Input should be a search query."""
 	api_wrapper: GoogleScholarSearch 
+	save_path: Optional[str] = Field(description = "path to the storing directory", default = None)
 
 	def _run(self, query:str) -> str:
 		"""
 		Use the tool
 		"""
-		return self.api_wrapper.run(query)
+		search_results = self.api_wrapper.run(query)
+		if self.save_path is not None:
+			with open(path.join(self.save_path, 'scholar_analytics_results.txt'), 'a') as f:
+				f.write(search_results)
+		return search_results
 
 # ############################## #
 # ArXiv Tool					 #
@@ -249,7 +254,7 @@ class GooglePatentTool(BaseTool):
 		"""
 		search_results = self.api_wrapper.run(query)
 		if self.save_path is not None:
-			with open(path.join(self.save_path, 'patents_scouting_results.txt'), 'a') as f:
+			with open(path.join(self.save_path, 'patents_analytics_results.txt'), 'a') as f:
 				f.write(search_results)
 		return search_results
 
@@ -569,9 +574,13 @@ def get_tool(tool_name: str, tools_kwargs: Dict) -> BaseTool:
 		return ArxivTool(api_wrapper = ArxivSearch(page_size = page_size, max_results = max_results))
 	
 	elif tool_name == 'google_scholar_search':
-		return GoogleScholarTool(api_wrapper = GoogleScholarSearch(top_k_results = tools_kwargs.get('max_results', 20)))
+		return GoogleScholarTool(api_wrapper = GoogleScholarSearch(top_k_results = tools_kwargs.get('max_results', 20)), 
+				save_path = tools_kwargs.get('save_path', path.join(os.getcwd(), 'pdfs')))
 	
-	
+	elif tool_name == 'google_patent_search':
+		return GooglePatentTool(api_wrapper = PatentSearch(max_number_of_pages = tools_kwargs.get('max_results', 20), 
+				save_path = tools_kwargs.get('save_path', path.join(os.getcwd(), 'pdfs'))))
+
 	elif tool_name == 'pdf_download':
 		save_path = tools_kwargs.get('save_path', path.join(os.getcwd(), 'pdfs'))
 		return PDFDownloadTool(downloader = PDFDownload(save_path = save_path))

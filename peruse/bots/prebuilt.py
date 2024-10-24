@@ -22,7 +22,7 @@ class ResearchAssistant:
 	Assistant class the helps in search, download and summarzing pdf files
 	"""
 	def __init__(self, save_in: Union[str, PathLike], 
-			  	search_in: Sequence[str] = ['arxiv'], max_results: int = 10) -> None:
+			  	search_in: Sequence[str] = ['arxiv', 'google_scholar'], max_results: int = 10) -> None:
 		self.save_in = save_in 
 		self.search_assistant = None 
 		self.summary_assistant = None 
