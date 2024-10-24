@@ -7,28 +7,28 @@ Additionally, more agents can be added for other complex tasks, such as running 
 Currently I am working on dofferent chatbots. But this repo is useful for many things already.
 
 ## Install the requirements
-The easiest way to run this package is to use the peruse_requirements.yml file to setup the virtual environment and install all packages. After lauching a terminal:
-
-```console
-conda env create -f peruse_requirements.yml
-```
-
-this will create a virtual environment named 'peruse' which can be activated by:
-``` console
-conda activate peruse 
-```
-and deactivated by:
-``` console
-conda deactivate peruse
-```
-I also included requirements.txt file which can be used by:
-```
+The easiest way to run this package is to use the requirements.txt file to setup the virtual environment and install all packages. After lauching a terminal:
+``` console 
 python3 -m venv <peruse or any other name>
-pip3 install requirements.txt
+pip3 install -r requirements.txt
 ```
 (if you prefer to set up a virtual environment of course). 
 
-If you like to use this repository, the only class you need is _ResearchAssistant_ from _peruse/bots/prebuilt_. 
+it is also possible to install dependencies in a conda environment. create a .YAML file and copy the text below:
+
+```console
+name: peruse
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.11
+  - anaconda
+  - pip
+  - pip:
+    - -r requirements.txt
+```
+
+If you like to use this repository, the only class you need for now is _ResearchAssistant_ from _peruse/bots/prebuilt_. 
 
 ### apply and obtain API_Keys
 You will need API keys for the following services: <br/>
