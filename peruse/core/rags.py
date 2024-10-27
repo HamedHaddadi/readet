@@ -79,6 +79,7 @@ class RAGPDF:
 		self.prompt = PromptTemplate.from_template(self.prompt_template)
 	
 	def __call__(self, pdf_file: str) -> RunnableSequence:
+		# extract image must be active
 		loader = PyPDFLoader(pdf_file)
 		doc = loader.load()
 		if self.replacements is not None:
