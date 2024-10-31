@@ -5,6 +5,7 @@ from typing import (Optional, Dict, List,Union, Any, TypedDict, Annotated, Seque
 from langchain_community.document_loaders import PyPDFLoader, pdf  
 from langchain_text_splitters import RecursiveCharacterTextSplitter 
 from langchain_chroma import Chroma
+from langchain_core.documents import Document 
 from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.prompts import BasePromptTemplate, PromptTemplate, ChatPromptTemplate, format_document  
 from langchain_core.runnables.base import RunnableSequence 
@@ -18,6 +19,9 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.graph.message import add_messages 
 from pprint import pprint 
 from pathlib import Path 
+from abc import ABCMeta, abstractmethod
+from collections.abc import Callable
+from . retrievers import get_retriever 
 from .. utils import prompts, models, docs
 from .. utils.schemas import SCHEMAS 
 
@@ -42,8 +46,78 @@ class RetrieverTool(BaseTool):
 	def _run(self, query: str) -> str:
 		return self.retriever.run(query)
 
+# ################################### #
+# Plain RAG  						  #
+# ################################### #
+class PlainRAG(Callable):
+	"""
+	Plain RAG class; 
+	__init__ parameters:
+		documents: documents to be used for creating the retriever
+		retriever: type of retriever to be used
+		embeddings: embeddings model to be used
+		chat_model: chat model to be used
+		prompt: prompt to be used
+		document_loader: document loader to be used
+		splitter: splitter to be used 
+	Attributes:
+		retriever: retriever object
+		llm: language model object
+		prompt: prompt object
+		runnable: the RAG chain which can be invoked based on the query
+	Main methods:
+		build(self): builds the RAG chain
+		run(self, query: str): invokes the RAG chain
+		__call__(self, query: str): invokes the RAG chain
+	"""
+	def __init__(self, documents: List[Document] | List[str] | str, retriever: Literal['plain', 'contextual-compression', 'parent-document'] = 'contextual-compression', 
+				embeddings: str = 'openai-text-embedding-3-large', 
+					chat_model: str = 'openai-gpt-4o-mini',
+						prompt: Optional[str] = None,
+					document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf', 
+						splitter: Literal['recursive', 'token'] = 'recursive',
+							kwargs: Dict[str, Any] = {}):
+		self.retriever = get_retriever(documents = documents, retriever_type = retriever,
+				embeddings = embeddings, document_loader = document_loader, splitter = splitter, **kwargs)
+		self.llm = models.configure_chat_model(chat_model, temperature = 0) 
+		self.prompt = prompt 
+		self.runnable = None  
+		self._built = False 
 	
+	@property 
+	def built(self):
+		return self._built 
 
+	@built.setter 
+	def built(self, status: bool):
+		if status is True and self._built is False:
+			self._built = True 
+
+	def __setattr__(self, name: str, value: Any) -> None:
+		if name == 'prompt':
+			if value in ['rag']:
+				template = prompts.TEMPLATES['rag']
+				super(PlainRAG, self).__setattr__(name, ChatPromptTemplate.from_template(template))
+			elif isinstance(value, str) and len(value.split(' ')) > 1:
+				super(PlainRAG, self).__setattr__(name, value)
+			elif value is None:
+				raise ValueError('prompt cannot be None') 
+		else:
+			super(PlainRAG, self).__setattr__(name, value)
+	
+	def build(self) -> None:
+		self.runnable = ({'context': self.retriever, 'question': RunnablePassthrough()} | self.prompt | self.llm | StrOutputParser())
+
+	def run(self, query: str) -> str:
+		if self.built is False:
+			self.built = True 
+			self.build()
+		return self.runnable.invoke(query)
+
+	def __call__(self, query: str) -> str:
+		return self.run(query)
+
+	
 # ################################### #
 # 			      RAGs				  #
 # ################################### #

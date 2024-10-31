@@ -25,7 +25,7 @@ class AgentState(TypedDict):
 # ########################################################### #
 class Supervisor:
 	"""
-	The class create a Supervisor multi-agent patent and returns a Runnable (CompiledGraph)
+	The class create a Supervisor multi-agent and returns a Runnable (CompiledGraph)
 	Args:
 		agents: a dictionary of agent name and a list of tools. Example: {'research':[GooglePatentsTool]}
 	model:
