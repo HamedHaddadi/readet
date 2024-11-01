@@ -151,7 +151,8 @@ class ContextualCompression(Retriever):
 		super().__init__()
 		self.documents = documents
 		self.llm = OpenAI(temperature = 0)
-		self.base_retriever = PlainRetriever(documents, embeddings).build(search_type, k, lambda_mult, fetch_k)
+		self.base_retriever = PlainRetriever(documents, embeddings)
+		self.base_retriever.build(search_type = search_type, k = k, lambda_mult = lambda_mult, fetch_k = fetch_k)
 		self.runnable = None 
 	
 	def build(self) -> ContextualCompressionRetriever:
@@ -160,7 +161,7 @@ class ContextualCompression(Retriever):
 		"""
 		compressor = LLMChainExtractor.from_llm(self.llm)
 		self.runnable = ContextualCompressionRetriever(base_compressor = compressor, 
-												 base_retriever = self.base_retriever) 
+												 base_retriever = self.base_retriever.runnable) 
 		self.built = True 
 		return self.runnable 
 	
@@ -275,10 +276,10 @@ def get_retriever(documents: List[Document] | List[str] | str,
 		else:
 			retriever = PlainRetriever(documents, embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'))
 		
-		runnable = retriever.build(search_type = kwargs.get('search_type', 'similarity'),
+		_ = retriever.build(search_type = kwargs.get('search_type', 'similarity'),
 										k = kwargs.get('k', 5), lambda_mult = kwargs.get('lambda_mult', 0.5),
 											fetch_k = kwargs.get('fetch_k', 20))
-		return runnable 
+		return retriever 
 	
 	elif retriever_type == 'contextual-compression':
 		if not all(isinstance(doc, Document) for doc in documents) and (all(isinstance(doc, str) for doc in documents) or isinstance(documents, str)):
@@ -292,6 +293,6 @@ def get_retriever(documents: List[Document] | List[str] | str,
 				search_type = kwargs.get('search_type', 'similarity'), k = kwargs.get('k', 5), lambda_mult = kwargs.get('lambda_mult', 0.5),
 									fetch_k = kwargs.get('fetch_k', 20))
 		
-		runnable = retriever.build()
-		return runnable 
+		_ = retriever.build()
+		return retriever 
 	

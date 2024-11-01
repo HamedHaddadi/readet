@@ -2,6 +2,7 @@
 # custom tools for interacting with documents #
 # ########################################### #
 import os
+import re 
 import sys 
 import plotly 
 from time import time
@@ -23,7 +24,7 @@ from langchain_community.document_loaders import pdf
 from typing import Literal, Optional, Any, Dict, Union, List, Sequence
 from urllib.request import urlretrieve  
 from . summarizers import SUMMARIZERS
-from . rags import RAGS 
+from . rags import RAGS, PlainRAG  
 from .. utils import models, prompts, docs 
 
 # ## Google Scholar Search Tool ## #
@@ -501,6 +502,52 @@ class ExtractKeywordsTool(BaseTool):
 			else:
 				return keywords 
 
+# ################################################ #
+# RAG tools 										#
+# ################################################ #
+class RAGTool(BaseTool):
+	"""
+	Tool that uses RAG to query documents. Use this tool when you are asked to
+		ask questions about documents stored in a folder.
+	"""
+	name: str = "rag_tool"
+	description: str = """
+		this tool uses RAG to query documents stored in a folder. Useful when you are asked to 
+			ask questions about documents stored in a folder.
+	"""
+	rag: Any = Field(description = "the RAG model", default = None)
+	path_to_files: str = Field(description = "path to the directory/folder containing pdf files")
+	files: List[str] = Field(description = "list of files to query", default = [])
+
+	@root_validator(pre = True)
+	def validate_files(cls, values: Dict) -> Dict:
+		values['files'] = [file_name for file_name in listdir(values.get('path_to_files')) if '.pdf' in file_name]
+		return values 
+
+	def _check_pdf_file(self, query_pdf: str) -> bool:
+		query_set = set(re.split("_| |.pdf", query_pdf)).difference({''})
+		for pdf_file in self.files:
+			pdf_set = set(re.split("_| |.pdf", pdf_file)).difference({''})
+			overlap = query_set.intersection(pdf_set)
+			if len(overlap) == len(query_set):
+				return path.join(self.path_to_files, pdf_file)
+		return None  
+	
+	def _run(self, query: str) -> str:
+		pdf_file = self._check_pdf_file(query)
+
+		if pdf_file is not None:
+			if self.rag is None:
+				print('now I am building the RAG model')
+				self.rag = PlainRAG(documents = pdf_file, retriever = 'contextual-compression')
+				self.rag.build()
+			else:
+				print('now I am adding the pdf file to the RAG model')
+				self.rag.add_pdf(pdf_file)
+		elif pdf_file is None:
+			print('now I am running the RAG model')
+			return self.rag.run(query) 
+			
 
 # ############################################### 	#
 # A tool to extract keywords from a pdf file and  	#

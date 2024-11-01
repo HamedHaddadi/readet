@@ -19,7 +19,6 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.graph.message import add_messages 
 from pprint import pprint 
 from pathlib import Path 
-from abc import ABCMeta, abstractmethod
 from collections.abc import Callable
 from . retrievers import get_retriever 
 from .. utils import prompts, models, docs
@@ -73,7 +72,7 @@ class PlainRAG(Callable):
 	def __init__(self, documents: List[Document] | List[str] | str, retriever: Literal['plain', 'contextual-compression', 'parent-document'] = 'contextual-compression', 
 				embeddings: str = 'openai-text-embedding-3-large', 
 					chat_model: str = 'openai-gpt-4o-mini',
-						prompt: Optional[str] = None,
+						prompt: Optional[str] = 'rag',
 					document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf', 
 						splitter: Literal['recursive', 'token'] = 'recursive',
 							kwargs: Dict[str, Any] = {}):
@@ -92,6 +91,8 @@ class PlainRAG(Callable):
 	def built(self, status: bool):
 		if status is True and self._built is False:
 			self._built = True 
+		elif status is False and self._built is True:
+			self._built = False 
 
 	def __setattr__(self, name: str, value: Any) -> None:
 		if name == 'prompt':
@@ -105,8 +106,12 @@ class PlainRAG(Callable):
 		else:
 			super(PlainRAG, self).__setattr__(name, value)
 	
+	def add_pdf(self, pdf_file: str) -> None:
+		self.built = False 
+		self.retriever.add_pdf(pdf_file)
+
 	def build(self) -> None:
-		self.runnable = ({'context': self.retriever, 'question': RunnablePassthrough()} | self.prompt | self.llm | StrOutputParser())
+		self.runnable = ({'context': self.retriever.runnable, 'question': RunnablePassthrough()} | self.prompt | self.llm | StrOutputParser())
 
 	def run(self, query: str) -> str:
 		if self.built is False:
@@ -116,6 +121,7 @@ class PlainRAG(Callable):
 
 	def __call__(self, query: str) -> str:
 		return self.run(query)
+
 
 	
 # ################################### #
