@@ -26,6 +26,7 @@ from urllib.request import urlretrieve
 from . summarizers import SUMMARIZERS
 from . rags import RAGS, PlainRAG  
 from .. utils import models, prompts, docs 
+from . chains import TitleExtractor
 
 # ## Google Scholar Search Tool ## #
 # API Wrapper
@@ -516,12 +517,15 @@ class RAGTool(BaseTool):
 			ask questions about documents stored in a folder.
 	"""
 	rag: Any = Field(description = "the RAG model", default = None)
+	title_extractor: Any = Field(description = "the title extractor model", default = None)
 	path_to_files: str = Field(description = "path to the directory/folder containing pdf files")
 	files: List[str] = Field(description = "list of files to query", default = [])
+	title_extractor_chat_model: str = Field(description = "the chat model for the title extractor", default = 'openai-gpt-4o-mini')
 
 	@root_validator(pre = True)
 	def validate_files(cls, values: Dict) -> Dict:
 		values['files'] = [file_name for file_name in listdir(values.get('path_to_files')) if '.pdf' in file_name]
+		values['title_extractor'] = TitleExtractor(chat_model = values.get('title_extractor_chat_model', 'openai-gpt-4o-mini'))
 		return values 
 
 	def _check_pdf_file(self, query_pdf: str) -> bool:
@@ -534,19 +538,20 @@ class RAGTool(BaseTool):
 		return None  
 	
 	def _run(self, query: str) -> str:
-		pdf_file = self._check_pdf_file(query)
-
+		title = self.title_extractor(query)
+		print("the title I could extract is ", title)
+		pdf_file = self._check_pdf_file(title)
+		print(f"the pdf file I found is {pdf_file}")
 		if pdf_file is not None:
 			if self.rag is None:
 				print('now I am building the RAG model')
 				self.rag = PlainRAG(documents = pdf_file, retriever = 'contextual-compression')
 				self.rag.build()
 			else:
-				print('now I am adding the pdf file to the RAG model')
+				#print('now I am adding the pdf file to the RAG model')
 				self.rag.add_pdf(pdf_file)
-		elif pdf_file is None:
-			print('now I am running the RAG model')
-			return self.rag.run(query) 
+		print('now I am running the RAG model')
+		return self.rag.run(query) 
 			
 
 # ############################################### 	#

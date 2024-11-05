@@ -2,22 +2,13 @@
 # ################################################## #
 # Prebuilt functions and classes for agentic systems #
 # ################################################## #
-from os import path, makedirs, PathLike  
-from datetime import datetime  
-from typing import Literal, Union, List, Sequence, Optional 
+from os import PathLike  
+from typing import Union, Sequence, Literal
 # langchain, langgraph 
-from langgraph.graph.graph import CompiledGraph 
-from langgraph.graph import StateGraph 
-from langgraph.prebuilt import create_react_agent 
-from langchain_openai import ChatOpenAI
-from langchain_core.runnables import Runnable
-# peruse tools 
-from .. core import tools as peruse_tools 
-from . base import ReAct, Assistant 
-from . multi_agent import Supervisor
+from . assistants import Assistant
+from . agents import ReAct 
 
-
-class ResearchAssistant:
+class ResearchAssistantLite:
 	"""
 	Assistant class the helps in search, download and summarzing pdf files
 	"""
@@ -49,6 +40,36 @@ class ResearchAssistant:
 	
 	def enable_summary(self) -> None:
 		self.summary_assistant()
+
+# ################################################## #
+#  Research Assistant 								 #
+# ################################################## #
+class ResearchAssistant:
+	"""
+	Research assistant class that uses 
+		multiple subgraphs to search, download, summarize and query pdf files
+	the number of subgraphs depends on the tools that are used by the agent.
+	The primary assistant automatically handles the conversation between agents.
+	Note that the number of agents is fixed:
+		search agent: uses arxiv and scholar to search for papers and downloads them
+		summary agent: summarizes the downloaded pdfs
+		query agent: queries the downloaded pdfs
+	"""
+	def __init__(self, max_results: int = 10) -> None:
+		self.search_runnable = None 
+		self.summary_runnable = None 
+		self.query_runnable = None
+		self._configure_search_assistant(max_results)
+		self._configure_summary_assistant()
+		self._configure_query_assistant()
+
+	def build(self) -> None:
+		pass 
+
+	def run(self) -> None:
+		pass 
+
+
 
 	
 

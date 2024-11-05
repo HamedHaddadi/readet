@@ -100,6 +100,13 @@ EXTRACT_KEYWORDS = """
 {text}	
 """
 
+# ### Title extraction from documents ### #
+TITLE_EXTRACTION = """
+    you are responsible for inferring title from a text.
+    	The title you are looking for is inside the text. Just try to find it an add nothing of your own. 
+            {text}
+"""
+
 # ### structured outputs ### #
 TO_STRUCTURED = """
 	you are goven the following text. Try to structure this text using the keywords
@@ -119,6 +126,7 @@ TEMPLATES = {'suspensions': SUSPENSIONS,
 													'question-rewriter': QUESTION_REWRITER}, 
 						'agentic-rag': {'relevance-grader': RELEVANCE_GRADER}, 
 							'extract-keywords': EXTRACT_KEYWORDS, 
-								'to-structured': TO_STRUCTURED}
+								'to-structured': TO_STRUCTURED, 
+									'title-extraction': TITLE_EXTRACTION}
 
 
