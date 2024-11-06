@@ -655,6 +655,9 @@ def get_tool(tool_name: str, tools_kwargs: Dict) -> BaseTool:
 					rag_chat_model = tools_kwargs.get('rag_chat_model', 'openai-gpt-4o-mini'),
 					rag_embedding_model = tools_kwargs.get('rag_embedding_model', 'openai-text-embedding-3-large'))
 	
+	elif tool_name == "rag":
+		return RAGTool(path_to_files = tools_kwargs.get('save_path', path.join(os.getcwd(), 'pdfs')))	
+	
 	else:
 		raise ValueError(f"tool {tool_name} is not found") 
 	
