@@ -9,15 +9,13 @@ from functools import partial
 # langchain, langgraph 
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import StateGraph, START, END 
-from langgraph.prebuilt import tools_condition 
+from langgraph.checkpoint.memory import MemorySaver 
 # peruse modules 
 from . assistants import Assistant
 from .. utils import models  
 from .. core import tools as peruse_tools 
 from . agents import ReAct 
-from . components import (BaseState, PlainAssistant, update_dialog_state, 
-		CompleteOrEscalate, create_entry_node, handle_tool_error,
-		  create_tool_node_with_fallback, create_primary_assistant_router) 
+from . components import *  
 
 
 class ResearchAssistantLite:
@@ -153,13 +151,13 @@ class ResearchAssistant:
                                                     agents are aware of different tasks so do not mention them to users. """)
 						,("placeholder", "{messages}")]
 
-	def __init__(self, max_results: int = 10, 
+	def __init__(self, save_path: str, max_results: int = 10, 
 			  	arxiv_page_size: int = 10,
 			  		special_agent_llm: str = "openai-gpt-4o-mini", 
 					  primary_agent_llm: str = 'claude-3-sonnet-20240229',
 					  summarizer_type: str = 'plain',
 					   summary_chat_model: str = 'openai-gpt-4o-mini',
-						save_path: Optional[str] = None) -> None:
+							checkpointer: Literal["memory"] = "memory") -> None:
 		
 		self.llm = models.configure_chat_model(special_agent_llm, temperature = 0)
 		self.save_path = save_path  
@@ -177,6 +175,8 @@ class ResearchAssistant:
 		self.rag_tools = None 
 
 		self.primary_assistant_runnable = None 
+		# main runnable 
+		self.runnable = None  
 
 		self._configure_search_runnable(max_results, arxiv_page_size)
 		self._configure_file_runnable()
@@ -184,7 +184,10 @@ class ResearchAssistant:
 		self._configure_rag_runnable()
 		self._configure_primary_assistant_runnable(primary_agent_llm)
 
-
+		self.checkpointer = None  
+		if checkpointer == "memory":
+			self.checkpointer = MemorySaver()
+		
 	def _configure_search_runnable(self, max_results: int = None,
 								 	 page_size: int = None) -> None:
 		self.search_tools = [peruse_tools.get_tool(tool, tools_kwargs = {'save_path': self.save_path, 
@@ -198,7 +201,7 @@ class ResearchAssistant:
 		self.file_runnable = file_prompt | self.llm.bind_tools(self.file_tools + [CompleteOrEscalate]) 
 
 	def _configure_summary_runnable(self, summarizer_type: str, summary_chat_model: str) -> None:
-		self.summary_tools = [peruse_tools.get_tool("summarize_pdfs", tools_kwargs = {'save_path': self.save_path, 'chat_model': self.chat_model, 
+		self.summary_tools = [peruse_tools.get_tool("summarize_pdfs", tools_kwargs = {'save_path': self.save_path, 'chat_model': summary_chat_model, 
 														"summarizer_type": summarizer_type})]
 		summary_prompt = ChatPromptTemplate.from_messages(self.SUMMARY_MESSAGE)
 		self.summary_runnable = summary_prompt | self.llm.bind_tools(self.summary_tools + [CompleteOrEscalate]) 
@@ -215,30 +218,71 @@ class ResearchAssistant:
 
 	def build(self) -> None:
 		workflow = StateGraph(RAState) 
-		workflow.add_node("primary_assistant", PlainAssistant(self.primary_assistant_runnable))
+		#primary assistant
+		workflow.add_node("primary_assistant", Assistant(self.primary_assistant_runnable))
 		workflow.add_edge(START, "primary_assistant")
 
-		primary_assistant_router_options = ['enter_search', 'enter_list_files', 'enter_summary', 'enter_rag', END]
-		primary_assistant_router = partial(create_primary_assistant_router, tools = [ToSearch, ToListFiles, ToSummarize, ToRAG], 
-									 return_options = primary_assistant_router_options)
+		primary_assistant_router_options = ['enter_search', 'enter_list_files',
+					'enter_summary', 'enter_rag']
+		primary_assistant_router = Router([ToSearch, ToListFiles, ToSummarize, ToRAG],
+									    primary_assistant_router_options)
 		workflow.add_conditional_edges("primary_assistant", primary_assistant_router, 
-								 primary_assistant_router_options)
+								 primary_assistant_router_options + [END])
 		
+		# search entry 
+		workflow.add_node("enter_search", create_entry_node("search assistant", "search"))
+		workflow.add_node("search", Assistant(self.search_runnable))
+
+		workflow.add_edge("enter_search", "search")
+		workflow.add_node("search_tools", create_tool_node_with_fallback(self.search_tools))
+		workflow.add_edge("search_tools", "search")
 		
-		 
+		search_router = RouterBinary("search_tools", cancel_message = "leave_skill")
+		workflow.add_conditional_edges("search", search_router, ["leave_skill", 
+								"search_tools", END])
 		
+		workflow.add_node("leave_skill", pop_dialog_state)
+		workflow.add_edge("leave_skill", "primary_assistant")
+		
+		# adding the file agent 
+		workflow.add_node("enter_list_files", create_entry_node("file assistant", "list_files"))
+		workflow.add_node("list_files", Assistant(self.file_runnable))
+		workflow.add_edge("enter_list_files", "list_files")
+		workflow.add_node("list_files_tools", create_tool_node_with_fallback(self.file_tools))
+		workflow.add_edge("list_files_tools", "list_files")
+
+		file_router = RouterBinary("list_files_tools", cancel_message = "leave_skill")
+		workflow.add_conditional_edges("list_files", file_router, ["leave_skill", "list_files_tools", END])
+
+		
+		# adding the summary agent 
+		workflow.add_node("enter_summary", create_entry_node("summary assistant", "summarize_pdfs"))
+		workflow.add_node("summarize_pdfs", Assistant(self.summary_runnable))
+		workflow.add_edge("enter_summary", "summarize_pdfs")
+		workflow.add_node("summarize_pdfs_tools", create_tool_node_with_fallback(self.summary_tools))
+		workflow.add_edge("summarize_pdfs_tools", "summarize_pdfs")
+
+		summary_router = RouterBinary("summarize_pdfs_tools", cancel_message = "leave_skill")
+		workflow.add_conditional_edges("summarize_pdfs", summary_router, ["leave_skill", "summarize_pdfs_tools", END])
+
+		
+		# adding the rag agent 
+		workflow.add_node("enter_rag", create_entry_node("rag assistant", "rag"))
+		workflow.add_node("rag", Assistant(self.rag_runnable))
+		workflow.add_edge("enter_rag", "rag")
+		workflow.add_node("rag_tools", create_tool_node_with_fallback(self.rag_tools))
+		workflow.add_edge("rag_tools", "rag")
+
+		rag_router = RouterBinary("rag_tools", cancel_message = "leave_skill")
+		workflow.add_conditional_edges("rag", rag_router, ["leave_skill", "rag_tools", END])
+		self.runnable = workflow.compile(checkpointer = self.checkpointer)
 
 
-
-
-	
 	def run(self) -> None:
 		pass
 
 
-	# #############  #
-	# helper methods #
-	# #############  #
+
 	
 
 

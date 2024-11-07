@@ -121,6 +121,7 @@ class GoogleScholarTool(BaseTool):
 		"""
 		Use the tool
 		"""
+		print("running google scholar tool", query)
 		search_results = self.api_wrapper.run(query)
 		if self.save_path is not None:
 			with open(path.join(self.save_path, 'scholar_analytics_results.txt'), 'a') as f:

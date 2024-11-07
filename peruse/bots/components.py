@@ -24,7 +24,7 @@ class BaseState(TypedDict):
 # ################## #
 # Assistants 		 #
 # ################## #
-class PlainAssistant(CCallable):
+class Assistant(CCallable):
 	"""
 	Plain assistant that can be used to create an assistant using a runnable
 	runnable can be chain of prompt | llm or agent 
@@ -99,8 +99,6 @@ def create_entry_node(assistant_name: str, new_dialog_state: str) -> Callable:
 	return entry_node
 
 
-
-
 # ######################### #
 # pydantic models 		 #
 # ######################### #
@@ -139,11 +137,12 @@ class RouterMeta(type):
 		attributes.update({'__name__': name})
 		return super().__new__(cls, name, bases, attributes)
 
-class Router(RouterMeta):
+class Router(metaclass = RouterMeta):
 	"""
 	Router that can be used to create a router using a list of tools and a list of return options
+	This router is 
 	"""
-	def __init__(self, tools: List[ToolNode], return_options: List[str]):
+	def __init__(self, tools: List[BaseModel], return_options: List[str]):
 		self.tools = tools 
 		self.return_options = return_options 
 	
@@ -156,7 +155,30 @@ class Router(RouterMeta):
 			for tool, option in zip(self.tools, self.return_options):
 				if tool_calls[0]["name"] == tool.__name__:
 					return option 
-		raise ValueError(f"invalid route")	
+		raise ValueError(f"invalid route")
+
+class RouterBinary(metaclass = RouterMeta):
+	"""
+	a binary choice router
+	This router provides a binary choice based on a
+		CompleteOrEscalate logic 
+	"""
+	def __init__(self,  continue_message: str, router_tool: BaseModel = CompleteOrEscalate,
+			cancel_message: str = "leave_skill"):		
+		self.router_tool = router_tool
+		self.continue_message = continue_message 
+		self.cancel_message = cancel_message 
+
+	def __call__(self, state: BaseState):
+		route = tools_condition(state)
+		if route == END:
+			return END 
+		tool_calls = state["messages"][-1].tool_calls
+		did_cancel = any(tc.get("name") == self.router_tool.__name__ for tc in tool_calls)
+		if did_cancel:
+			return self.cancel_message
+		return self.continue_message
+		
 
 
 

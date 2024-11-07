@@ -6,7 +6,7 @@
 from typing import Literal, Union, List, Dict, Optional, TypeVar 
 from pprint import pprint 
 from collections.abc import Callable 
-from langchain.graph import StateGraph 
+from langgraph.graph import StateGraph 
 from langgraph.graph.graph import CompiledGraph
 from langgraph.checkpoint.memory import MemorySaver 
 from langchain_core.messages import AIMessage
