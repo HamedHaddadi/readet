@@ -107,11 +107,11 @@ class PlainRAG(Callable):
 			super(PlainRAG, self).__setattr__(name, value)
 	
 	def add_pdf(self, pdf_file: str) -> None:
-		self.built = False 
 		self.retriever.add_pdf(pdf_file)
 
 	def build(self) -> None:
 		self.runnable = ({'context': self.retriever.runnable, 'question': RunnablePassthrough()} | self.prompt | self.llm | StrOutputParser())
+		self._built = True 
 
 	def run(self, query: str) -> str:
 		if self.built is False:
@@ -122,52 +122,6 @@ class PlainRAG(Callable):
 	def __call__(self, query: str) -> str:
 		return self.run(query)
 
-
-	
-# ################################### #
-# 			      RAGs				  #
-# ################################### #
-class RAGPDF:
-	"""
-	vanilla RAG for single PDF files
-	returns a runnbale chain of ({retriever, question} | prompt | llm | parser)
-	chain will be invoked by the caller to get the output text. Question will be input by the caller
-	"""
-	init_keys = ['chunk_size', 'chunk_overlap', 'chat_model', 
-						'embedding_model', 'schema', 'temperature', 'replacements']
-
-	def __init__(self, chunk_size: int = 2000,
-	 				chunk_overlap: int = 150,
-					 	 chat_model: str = 'openai-gpt-4o-mini', 
-						  	embedding_model: str = 'openai-text-embedding-3-large',
-						  	prompt: str = 'suspensions', 
-							  	temperature: int = 0, 
-								  	replacements: Optional[Dict[str, str]] = None):
-		self.retriever = None 
-		self.prompt_template = prompts.TEMPLATES[prompt]
-		self.prompt = None 
-		self.llm = models.configure_chat_model(chat_model, temperature = temperature)
-		self.parser = StrOutputParser()
-		self.replacements = replacements 
-		self._configure(chunk_size, chunk_overlap, embedding_model)
-	
-	def _configure(self, chunk_size: int, chunk_overlap: int, embedding_model: str) -> None:
-		self.splitter = RecursiveCharacterTextSplitter(chunk_size = chunk_size,
-						 chunk_overlap = chunk_overlap, add_start_index = True, 
-						 		separators = ["\n\n", "\n", "(?<=\. )", " ", ""])
-		self.embedding = models.configure_embedding_model(embedding_model)
-		self.prompt = PromptTemplate.from_template(self.prompt_template)
-	
-	def __call__(self, pdf_file: str) -> RunnableSequence:
-		# extract image must be active
-		loader = PyPDFLoader(pdf_file)
-		doc = loader.load()
-		if self.replacements is not None:
-			doc = docs.format_doc_object(doc, self.replacements)
-		splits = self.splitter.split_documents(doc)
-		store = Chroma.from_documents(documents = splits, embedding = self.embedding)
-		retriever = store.as_retriever(search_type = "mmr", k = 4)
-		return ({'context': retriever, 'question': RunnablePassthrough()} | self.prompt | self.llm | self.parser)
 
 # #################################### #
 # 	Structured Outputs				   #
@@ -190,9 +144,7 @@ def extract_schema_plain(schemas: Union[List[str], str],
 	elif isinstance(schemas, str):
 		return (prompt | llm.with_structured_output(schema = SCHEMAS[schemas]))
 
-# ############################### #
-# Self-aware RAG				  #
-# ############################### #
+
 # ####################### #
 # Self-RAG 				  #
 # ####################### #
@@ -238,30 +190,31 @@ class SelfRAG:
 		run(self): whicb runs the graph
 	"""
 	RECURSION_LIMIT = 40
-	def __init__(self, pdf_file: str, chunk_size: int = 4000,
-	 				chunk_overlap: int = 150,
+	def __init__(self, documents: List[Document] | List[str] | str,
+		retriever: Literal['plain', 'contextual-compression', 'parent-document'] = 'contextual-compression',
+			splitter: Literal['recursive', 'token'] = 'recursive',
+				document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 					 	 chat_model: str = 'openai-gpt-4o-mini', 
-						  	embedding_model: str = 'openai-text-embedding-3-large'):
+						  	embedding_model: str = 'openai-text-embedding-3-large', 
+									kwargs: Dict[str, Any] = {}):
+		self.runnable = None 
 
+		# note that self.retriever.runnable is the RunnableSequence method to call 
+		# retriver object is created here in case more pdf needs to be added in the RAG
+		self.retriever = get_retriever(documents = documents, retriever_type = retriever,
+				embeddings = embedding_model, document_loader = document_loader, splitter = splitter, **kwargs)
+		
 		self.retrieval_grader = None 
 		self.hallucination_grader = None 
 		self.answer_grader = None 
 		self.question_rewriter = None 
 		self.rag_chain = None 
-		self.retriever = None 
-		self.graph = None
 
 		self.chat_model = chat_model 
-		self.embedding_model = embedding_model  
 
 		self._configured = False 
 		self._built = False 
 
-		self.splitter = RecursiveCharacterTextSplitter(chunk_size = chunk_size,
-						 chunk_overlap = chunk_overlap, add_start_index = True, 
-						 		separators = ["\n\n", "\n", "(?<=\. )", " ", ""])
-		self.split_docs = pdf_file 
-	
 	@property 
 	def configured(self):
 		return self._configured 
@@ -280,24 +233,6 @@ class SelfRAG:
 		if self._built is False and status is True:
 			self._built = True  
 	
-	def __setattr__(self, name: str, value: Any) -> None:
-		if name == 'split_docs':
-			value_path = Path(value)
-			if value_path.exists() and value_path.is_file() and '.pdf' in value:
-				pages = pdf.PyMuPDFLoader(value, extract_images = True)
-				if pages is not None:
-					pages = self.splitter.split_documents(pages.load())
-				super(SelfRAG, self).__setattr__(name, pages)
-			else:
-				raise FileExistsError(f"pdf file {value} does not exist")
-		else:
-			super(SelfRAG, self).__setattr__(name, value)
-
-	def _configure_retriever(self) -> None:
-		vectorstore = Chroma.from_documents(documents = self.split_docs, collection_name = "rag-chroma", 
-							embedding = models.configure_embedding_model(self.embedding_model))
-		self.retriever = vectorstore.as_retriever()		
-
 	def _configure_grader(self) -> None:
 		llm = models.configure_chat_model(self.chat_model, temperature = 0)
 		struct_llm_grader = llm.with_structured_output(GradeRetrieval)
@@ -359,9 +294,8 @@ class SelfRAG:
     	Returns:
         	state (dict): New key added to state, answers, that contains retrieved answers
 		"""
-		print(">>> RETRIEVE <<<")
 		question = state["question"]
-		answers = self.retriever.invoke(question)
+		answers = self.retriever.runnable.invoke(question)
 		return {"answers": answers, "question": question}
 	
 	def generate(self, state: Dict[str, Union[str, None]]) -> Dict[str, Union[str, None]]:
@@ -372,7 +306,6 @@ class SelfRAG:
 		Returns:
 			state (dict): New key added to the state: 'generation', which contains LLM generation 
 		"""
-		print(">>> GENERATE <<<")
 		question = state['question']
 		answers = state['answers']
 
@@ -387,7 +320,6 @@ class SelfRAG:
     	Returns:
         	state (dict): Updates answers key with only filtered relevant answers		
 		"""
-		print(">>> CHECK ANSWER RELEVANCE TO QUESTION <<<")
 		question = state["question"]
 		answers = state["answers"]
 
@@ -397,10 +329,8 @@ class SelfRAG:
 				{"question": question, "answer": a.page_content})
 			grade = score.binary_score 
 			if grade == "yes":
-				print("**GRADE: ANSWER RELEVANT!**")
 				filtered.append(a)
-			else:
-				print("!!GRADE: ANSWER NOT RELEVANT!!")
+			
 		return {"answers": filtered, "question": question}
 	
 	def transform_query(self, state: Dict[str, Union[str, None]]) -> Dict[str, str]:
@@ -411,7 +341,6 @@ class SelfRAG:
     	Returns:
     	    state (dict): Updates question key with a re-phrased question		
 		"""
-		print(">> TRANSFORM QUERY <<")
 		question = state["question"]
 		answers = state["answers"]
 
@@ -426,14 +355,11 @@ class SelfRAG:
 		Returns:
 			std: Binary decision for next node to call
 		"""
-		print(">> ASSESS GRADED ANSWERS <<")
 		filtered_answers = state["answers"]
 
 		if not filtered_answers:
-			print("!! DECISION: ALL NASWERS ARE NOT RELEVANT TO QUESTION. TRANSFORM QUERY ---")
 			return "transform_query"
 		else:
-			print("** DECISION: GENERATE >>>")
 			return "generate"
 	
 	def grade_generation_v_answers_and_question(self, state: Dict[str, Union[str, None]]) -> str:
@@ -444,7 +370,6 @@ class SelfRAG:
 		Returns:
 			str: Decision for next node to call
 		"""
-		print(">> CHECK HALLUCINATION <<")
 		question = state["question"]
 		answers = state["answers"]
 		generation = state["generation"]
@@ -454,22 +379,16 @@ class SelfRAG:
 
 		grade = score.binary_score 
 		if grade == "yes":
-			print("*** DECISION: GENERATION IS GROUNDED IN ANSWERS ***")
-			print("?? GRADE GENERATION VS QUESTION ??")
 			score = self.answer_grader.invoke({"question": question, "generation": generation})
 			grade = score.binary_score
 			if grade == "yes":
-				print("DECISION ==> GENERATION ADDRESSES THE QUESTION!! ")
 				return "useful"
 			else:
-				print("DECISION ==> GENERATION DOES NOT ADDRESS THE QUESTION !!")
 				return "not useful"
 		else:
-			print("DECISION: GENERATION IS NOT GROUNDED IN ANSWERS, RETRY! ")
 			return "not supported"
 
 	def configure(self) -> None:
-		self._configure_retriever() 
 		self._configure_grader()
 		self._configure_rag_chain()
 		self._configure_hallucination_grader()
@@ -500,27 +419,34 @@ class SelfRAG:
 			"generate", self.grade_generation_v_answers_and_question, 
 			{"not supported": "generate", "useful": END, 
 				"not useful": "transform_query",},)
-		self.graph = flow.compile()
+		self.runnable = flow.compile()
 		self._built = True 
-
+	
+	# other helper methods 
 	def _run(self, question: str) -> str:
 		inputs = {"question": question}
-		outputs = self.graph.invoke(inputs)
+		outputs = self.runnable.invoke(inputs)
 		return outputs["generation"]
 
-	def _run_stream(self, question: str) -> None:
+	def _run_stream(self, question: str, stream_mode: Literal['updates', 'values'] = 'updates') -> None:
 		inputs = {"question": question}
-		for output in self.graph.stream(inputs, {"recursion_limit": self.RECURSION_LIMIT}):
+		for output in self.runnable.stream(inputs, {"recursion_limit": self.RECURSION_LIMIT}, stream_mode = stream_mode):
 			for key,value in output.items():
 				pprint(f"Node '{key}' : ")
 			pprint("*****")
 		pprint(value["generation"])		
 	
-	def run(self, question: str, stream: bool = False) -> Union[str, None]:
+	def run(self, question: str, stream: bool = False, stream_mode: Literal['updates', 'values'] = 'updates') -> Union[str, None]:
 		if stream:
-			self._run_stream(question)
+			self._run_stream(question, stream_mode = stream_mode)
 		else:
 			return self._run(question)
+	
+	def add_pdf(self, pdf_file: str) -> None:
+		self.retriever.add_pdf(pdf_file)
+
+	def __call__(self, question: str, stream: bool = False, stream_mode: Literal['updates', 'values'] = 'updates') -> Union[str, None]:
+		return self.run(question, stream = stream, stream_mode = stream_mode)
 
 # ##########################################  #
 # Agentic RAG							      #
@@ -745,8 +671,7 @@ class AgenticRAG:
 		return self.run(query, stream = stream)
 
 # ##################################### #
-RAGS = {'single-pdf': RAGPDF, 
-			'self-single-pdf': SelfRAG, 
+RAGS = {'self-single-pdf': SelfRAG, 
 				'agentic-rag-pdf': AgenticRAG}
 
 EXTRACTORS = {'plain': extract_schema_plain}
