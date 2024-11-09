@@ -1,7 +1,7 @@
 # ################################################## #
-# assistants 										 #
-# this module contains several assistants that       #
-# can be used to run graphs 						 #
+# chat bot assistants 								 #
+# this module contains tools to run graphs           #
+# in chatbot format 		 						 #
 # ################################################## #
 from typing import Literal, Union, List, Dict, Optional, TypeVar 
 from pprint import pprint 
@@ -13,31 +13,38 @@ from langchain_core.messages import AIMessage
 from langchain_core.runnables import Runnable
 
 
-# General assistante class to run a graph 
-Assist = TypeVar('Assist', bound = "Assistant")
-class Assistant(Callable):
+# General class to run a graph in chatbot format 
+Chat = TypeVar('Chat', bound = "SimpleChat")
+class SimpleChat(Callable):
 	"""
 	Assistant class 
 	runnable: can be a compiled graph or a chain or agent 
 	thread: integer; id of a thread for adding memory to the conversation
 	"""
-	def __init__(self, runnable: Runnable, thread: int = 1, memory: Optional[Literal["device"]] = None):
+	def __init__(self, runnable: Runnable, thread: int = 1,
+			  	 memory: Optional[Literal["device"]] = None, 
+				 	config: Optional[Dict] = None):
 		
-		self.config = None 
+		if config is not None:
+			self.config = config 
+		else:
+			self.config = {"configurable": {"thread_id": thread}}
+
 		if isinstance(runnable, CompiledGraph):
 			self.runnable = runnable 
 		elif isinstance(runnable, StateGraph):		
 			memory = {'device': MemorySaver(), None: None}[memory]
-			self.config = None 
-			if memory is not None:
-				self.config = {"configurable": {"thread_id": thread}}
 			self.runnable = runnable.compile(checkpointer = memory) 
 	
 	def _get_last_message(self, value: Union[List, Dict]):
 		if isinstance(value, list):
 			return value[-1]
 		elif isinstance(value, dict):
-			return value['messages'][-1]
+			messages = value['messages']
+			if isinstance(messages, list):
+				return messages[-1]
+			else:
+				return messages
 	
 	def _run_chat_mode(self, stream_mode: Literal['updates', 'values'] = 'updates'):
 		while True:
@@ -73,7 +80,7 @@ class Assistant(Callable):
 			self._run_single_shot_mode(query, stream_mode = stream_mode)
 	
 	@classmethod
-	def from_graph(cls, graph: Union[StateGraph, CompiledGraph], thread: int = 1) -> Assist:
+	def from_graph(cls, graph: Union[StateGraph, CompiledGraph], thread: int = 1) -> Chat:
 		"""
 		accept an uncompiled graph as input
 		"""

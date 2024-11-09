@@ -2,14 +2,13 @@
 # module contains components that are used in the    #
 # other chatbots 								     #
 # ################################################## #
-from typing import Annotated, List, TypedDict, Dict, Callable, Optional  
+from typing import Annotated, List, TypedDict, Dict, Callable, Optional, Literal  
 from pydantic import BaseModel 
 from langgraph.graph.message import AnyMessage, add_messages 
 from langgraph.prebuilt import ToolNode, tools_condition 
 from langgraph.graph import START, END
 from langchain_core.runnables import Runnable, RunnableLambda 
 from langchain_core.messages import ToolMessage
-from collections.abc import Callable as CCallable 
 
 # #################### #
 # graph states		   #
@@ -24,7 +23,7 @@ class BaseState(TypedDict):
 # ################## #
 # Assistants 		 #
 # ################## #
-class Assistant(CCallable):
+class Assistant:
 	"""
 	Plain assistant that can be used to create an assistant using a runnable
 	runnable can be chain of prompt | llm or agent 
@@ -34,7 +33,6 @@ class Assistant(CCallable):
 
 	def __call__(self, state: BaseState):
 		while True:
-			state = {**state}
 			result = self.runnable.invoke(state)
 			if not result.tool_calls and (not result.content or isinstance(result.content, list) and not result.content[0].get("text")):
 				messages = state['messages'] + [("user", "Respond with a real output.")]
@@ -58,13 +56,6 @@ def create_tool_node_with_fallback(tools: List) -> Dict:
 # ################# #
 # dialog handling   #
 # ################# #
-def update_dialog_state(left: List[str], right: str) -> List[str]:
-	if right is None:
-		return left
-	if right == 'pop':
-		return left[:-1]
-	else:
-		return left + [right]
 
 def pop_dialog_state(state: BaseState) -> Dict:
 	"""Pop the dialog stack and return to the main assistant.
@@ -76,6 +67,13 @@ def pop_dialog_state(state: BaseState) -> Dict:
 		messages.append(ToolMessage(content = """Resuming dialog with the host assistant. 
 			Please reflect on the past conversation and assist the user as needed.""", tool_call_id = state["messages"][-1].tool_calls[0]["id"]))
 	return {"dialog_state": "pop", "messages": messages}
+
+def update_dialog_stack(left: str, right: str | None) -> List[str]:
+	if right is None:
+		return left
+	if right == 'pop':
+		return left[:-1]
+	return left + [right]
 
 # ######################## #
 # Entry node        	   #
@@ -134,17 +132,14 @@ class RouterMeta(type):
 	objects of a callable do not have __name__ attribute
 	"""
 	def __new__(cls, name, bases, attributes):
-		attributes.update({'__name__': name})
+		attributes.update({'__name__': attributes.get("name")})
 		return super().__new__(cls, name, bases, attributes)
 
 class Router(metaclass = RouterMeta):
-	"""
-	Router that can be used to create a router using a list of tools and a list of return options
-	This router is 
-	"""
-	def __init__(self, tools: List[BaseModel], return_options: List[str]):
+	def __init__(self, tools: List[BaseModel], return_options: List[str], name: Optional[str] = None):
 		self.tools = tools 
-		self.return_options = return_options 
+		self.return_options = return_options
+		self.name = name  
 	
 	def __call__(self, state: BaseState):
 		route = tools_condition(state)
@@ -157,17 +152,13 @@ class Router(metaclass = RouterMeta):
 					return option 
 		raise ValueError(f"invalid route")
 
-class RouterBinary(metaclass = RouterMeta):
-	"""
-	a binary choice router
-	This router provides a binary choice based on a
-		CompleteOrEscalate logic 
-	"""
+class ToolRouter(metaclass = RouterMeta):
 	def __init__(self,  continue_message: str, router_tool: BaseModel = CompleteOrEscalate,
-			cancel_message: str = "leave_skill"):		
+			cancel_message: str = "leave_skill", name: Optional[str] = None):		
 		self.router_tool = router_tool
 		self.continue_message = continue_message 
 		self.cancel_message = cancel_message 
+		self.name = name 
 
 	def __call__(self, state: BaseState):
 		route = tools_condition(state)
