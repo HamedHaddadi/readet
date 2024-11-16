@@ -7,10 +7,9 @@
 from typing import List, Union, Literal, Dict, Any, TypeVar 
 from abc import ABCMeta, abstractmethod 
 from langchain_core.documents import Document
-from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores import VectorStoreRetriever
-from langchain_community.document_loaders import PyPDFLoader, pdf  
-from langchain_text_splitters import RecursiveCharacterTextSplitter, TextSplitter, TokenTextSplitter
+from langchain_community.document_loaders import PyPDFLoader, pdf
+from langchain_text_splitters import RecursiveCharacterTextSplitter, TokenTextSplitter
 from langchain.storage import InMemoryStore 
 from langchain_chroma import Chroma
 from langchain.retrievers import ContextualCompressionRetriever, ParentDocumentRetriever
@@ -134,6 +133,8 @@ class PlainRetriever(Retriever):
 				splitter_kwargs: Dict[str, Any] = {}) -> PR:
 		documents = doc_from_pdf_files(pdf_files, document_loader, splitter, splitter_kwargs)
 		return cls(documents, embeddings)
+
+
 		
 # ######################################### #
 # ContextualCompressionRetriever			#
@@ -232,6 +233,7 @@ class ParentDocument(Retriever):
 												child_splitter = self.child_splitter, id_key = "doc_id")
 		self.runnable.add_documents(self.documents)
 		self.built = True 
+	
 	def add_pdf(self, pdf_files: List[str] | str, 
 			 	document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 				splitter: Literal['recursive', 'token'] = 'recursive',
@@ -294,3 +296,19 @@ def get_retriever(documents: List[Document] | List[str] | str,
 		retriever.build()
 		return retriever 
 	
+	elif retriever_type == 'parent-document':
+		if not all(isinstance(doc, Document) for doc in documents) and (all(isinstance(doc, str) for doc in documents) or isinstance(documents, str)):
+			retriever = ParentDocument.from_pdf(documents,
+				store = kwargs.get('store', 'memory'),
+				embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'),
+					document_loader = kwargs.get('document_loader', 'pypdf'),
+							parent_splitter = kwargs.get('parent_splitter', 'token'),
+								child_splitter = kwargs.get('child_splitter', 'recursive'), **kwargs)
+		else:
+			retriever = ParentDocument(documents, embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'), store = kwargs.get('store', 'memory'),
+				parent_splitter = kwargs.get('parent_splitter', 'token'), child_splitter = kwargs.get('child_splitter', 'recursive'))
+		retriever.build()
+		return retriever 
+	
+	else:
+		raise ValueError(f"Invalid retriever type: {retriever_type}")
