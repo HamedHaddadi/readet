@@ -1,4 +1,4 @@
-# **peruse (Language Models for scientific perusing)**
+# **peruse (Language Models to dig into scientifi literature)**
 Contains collection of tools, runnables, agents and graphs to search the scientific and technical literature, including Google Scholar, Arxiv and Google Patents. You can also download and summarize articles and create knowledge graphs. It is also possible to 
 query pdf files using different Retrieval Augmented Generation (RAG) systems. 
 I have personally used this tool in my main area of expertise, complex fluids, computational fluid dynamics and computational materials science. 
