@@ -121,7 +121,7 @@ class GoogleScholarTool(BaseTool):
 		"""
 		Use the tool
 		"""
-		print("running google scholar tool", query)
+		print('query is', query)
 		search_results = self.api_wrapper.run(query)
 		if self.save_path is not None:
 			with open(path.join(self.save_path, 'scholar_analytics_results.txt'), 'a') as f:
@@ -178,6 +178,7 @@ class ArxivTool(BaseTool):
 		"""
 		Use the tool
 		"""
+		print('query is', query)
 		return self.api_wrapper.run(query)
 
 
@@ -426,6 +427,8 @@ class PDFSummaryTool(BaseTool):
 		return summary 
 
 	def _run(self, pdf_file: str) -> str:
+		#print(f"the pdf file I am summarizing is {pdf_file}")
+		#print("the path to the files is ", self.path_to_files)
 		if "all" in pdf_file.lower() and not pdf_file.endswith('.pdf'):
 			return self._summarize_all()
 		else:
@@ -540,18 +543,18 @@ class RAGTool(BaseTool):
 	
 	def _run(self, query: str) -> str:
 		title = self.title_extractor(query)
-		print("the title I could extract is ", title)
+		#print("the title I could extract is ", title)
 		pdf_file = self._check_pdf_file(title)
-		print(f"the pdf file I found is {pdf_file}")
+		#print(f"the pdf file I found is {pdf_file}")
 		if pdf_file is not None:
 			if self.rag is None:
-				print('now I am building the RAG model')
+				#print('now I am building the RAG model')
 				self.rag = PlainRAG(documents = pdf_file, retriever = 'contextual-compression')
 				self.rag.build()
 			else:
 				#print('now I am adding the pdf file to the RAG model')
 				self.rag.add_pdf(pdf_file)
-		print('now I am running the RAG model')
+	#   print('now I am running the RAG model')
 		return self.rag.run(query) 
 			
 

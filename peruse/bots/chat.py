@@ -61,12 +61,14 @@ class SimpleChat(Callable):
 					if isinstance(last_message, AIMessage):
 						if last_message.content == "":
 							print("Assistant: I am working... wait!")
-						else:
+						elif isinstance(last_message.content, str):
 							print("Assistant:", last_message.content)
+						elif isinstance(last_message.content, list):
+							print("Assistant:", last_message.content[0]['text'])
 	
 	def _run_single_shot_mode(self, query: str, stream_mode: Literal['updates', 'values'] = 'updates') -> None:
 		inputs  = {"messages": [query]}
-		output = self.runnable.invoke(inputs, stream_mode = stream_mode)
+		output = self.runnable.invoke(inputs, config = None)
 		pprint(output["messages"][-1].content)
 
 	def __call__(self, chat: bool = True,

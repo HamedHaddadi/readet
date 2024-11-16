@@ -155,7 +155,7 @@ class ContextualCompression(Retriever):
 		self.base_retriever.build(search_type = search_type, k = k, lambda_mult = lambda_mult, fetch_k = fetch_k)
 		self.runnable = None 
 	
-	def build(self) -> ContextualCompressionRetriever:
+	def build(self):
 		"""
 		returns the runnable for use in a chain
 		"""
@@ -163,7 +163,6 @@ class ContextualCompression(Retriever):
 		self.runnable = ContextualCompressionRetriever(base_compressor = compressor, 
 												 base_retriever = self.base_retriever.runnable) 
 		self.built = True 
-		return self.runnable 
 	
 	def add_pdf(self, pdf_files: List[str] | str, 
 			 	document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
@@ -172,7 +171,7 @@ class ContextualCompression(Retriever):
 		self.built = False 
 		documents = doc_from_pdf_files(pdf_files, document_loader, splitter, splitter_kwargs)
 		self.base_retriever.vector_store.add_documents(documents)
-		_ = self.build()
+		self.build()
 		self.built = True  
 	
 	@classmethod
@@ -232,8 +231,7 @@ class ParentDocument(Retriever):
 												parent_splitter = self.parent_splitter, 
 												child_splitter = self.child_splitter, id_key = "doc_id")
 		self.runnable.add_documents(self.documents)
-		return self.runnable
-	
+		self.built = True 
 	def add_pdf(self, pdf_files: List[str] | str, 
 			 	document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 				splitter: Literal['recursive', 'token'] = 'recursive',
@@ -276,7 +274,7 @@ def get_retriever(documents: List[Document] | List[str] | str,
 		else:
 			retriever = PlainRetriever(documents, embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'))
 		
-		_ = retriever.build(search_type = kwargs.get('search_type', 'similarity'),
+		retriever.build(search_type = kwargs.get('search_type', 'similarity'),
 										k = kwargs.get('k', 5), lambda_mult = kwargs.get('lambda_mult', 0.5),
 											fetch_k = kwargs.get('fetch_k', 20))
 		return retriever 
@@ -293,6 +291,6 @@ def get_retriever(documents: List[Document] | List[str] | str,
 				search_type = kwargs.get('search_type', 'similarity'), k = kwargs.get('k', 5), lambda_mult = kwargs.get('lambda_mult', 0.5),
 									fetch_k = kwargs.get('fetch_k', 20))
 		
-		_ = retriever.build()
+		retriever.build()
 		return retriever 
 	

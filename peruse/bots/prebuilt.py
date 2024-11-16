@@ -2,7 +2,9 @@
 # ################################################## #
 # Prebuilt functions and classes for agentic systems #
 # ################################################## #
-from os import PathLike  
+from os import PathLike 
+import sqlite3 
+import threading 
 from pydantic import BaseModel, Field   
 from typing import Union, Sequence, Literal, Annotated, List, Optional
 from functools import partial 
@@ -151,10 +153,10 @@ class ResearchAssistant:
 	def __init__(self, save_path: str, max_results: int = 10, 
 			  	arxiv_page_size: int = 10,
 			  		special_agent_llm: str = "openai-gpt-4o-mini", 
-					  primary_agent_llm: str = 'claude-3-sonnet-20240229',
+					  primary_agent_llm: str = 'openai-gpt-4o-mini',
 					  summarizer_type: str = 'plain',
 					   summary_chat_model: str = 'openai-gpt-4o-mini',
-							checkpointer: Literal["memory"] = "memory") -> None:
+							checkpointer: Literal["memory", "sqlite"] = "sqlite") -> None:
 		
 		#self.llm = models.configure_chat_model(special_agent_llm, temperature = 0)
 		self.save_path = save_path 
@@ -186,6 +188,7 @@ class ResearchAssistant:
 		if checkpointer == "memory":
 			self.checkpointer = MemorySaver()
 		
+		
 	def _configure_search_runnable(self, max_results: int = None,
 								 	 page_size: int = None) -> None:
 		llm = models.configure_chat_model(self.spacial_agent_llm, temperature = 0)
@@ -214,7 +217,7 @@ class ResearchAssistant:
 		self.rag_runnable = rag_prompt | llm.bind_tools(self.rag_tools + [CompleteOrEscalate]) 
 
 	def _configure_primary_assistant_runnable(self, primary_agent_llm: str) -> None:
-		primary_llm = models.configure_chat_model(primary_agent_llm)
+		primary_llm = models.configure_chat_model(primary_agent_llm, temperature = 0)
 		primary_prompt = ChatPromptTemplate.from_messages(self.PRIMARY_MESSAGE)
 		self.primary_assistant_runnable = primary_prompt | primary_llm.bind_tools([ToSearch, ToListFiles, ToSummarize, ToRAG])
 

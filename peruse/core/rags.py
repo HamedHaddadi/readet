@@ -9,7 +9,7 @@ from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.prompts import BasePromptTemplate, PromptTemplate, ChatPromptTemplate, format_document  
 from langchain_core.runnables.base import RunnableSequence 
-from langchain_core.runnables import RunnablePassthrough 
+from langchain_core.runnables import RunnablePassthrough, Runnable 
 from langchain_core.output_parsers import StrOutputParser 
 from pydantic import BaseModel, Field 
 from langchain_core.retrievers import BaseRetriever
@@ -29,11 +29,11 @@ class RetrieverRunnable(BaseModel):
 	"""
 	Takes a retriever as an attribute and invokes a query on the retriever
 	"""
-	retriever: BaseRetriever
+	runnable: BaseRetriever
 	prompt: BasePromptTemplate = PromptTemplate.from_template("{page_content}")
 
 	def run(self, query: str) -> str:
-		docs = self.retriever.invoke(query)
+		docs = self.runnable.invoke(query)
 		return "\n\n".join(format_document(doc, self.prompt) for doc in docs)
 
 class RetrieverTool(BaseTool):
@@ -470,27 +470,26 @@ class AgenticRAG:
 	"""
 	agentic RAG that runs a RAG on a single pdf file. 
 	"""
-	def __init__(self, pdf_file: str, chunk_size: int = 2000, 
-						chunk_overlap: int = 150, 
+	def __init__(self, documents: List[Document] | List[str] | str,
+			  	retriever: Literal['plain', 'contextual-compression', 'parent-document'] = 'contextual-compression',
+				  splitter: Literal['recursive', 'token'] = 'recursive',
+						document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 								chat_model: str = "openai-gpt-4o-mini", 
-									embedding_model: str = "openai-text-embedding-3-large"):
-		self.retriever = None 
-		self.retriever_tool = None 
+									embedding_model: str = "openai-text-embedding-3-large", 
+										kwargs: Dict[str, Any] = {}):
+		self.runnable = None 
+		self.retriever = get_retriever(documents = documents, retriever_type = retriever,
+				embeddings = embedding_model, document_loader = document_loader, splitter = splitter, **kwargs)
+		self.retriever_tool = RetrieverTool(retriever = RetrieverRunnable(runnable = self.retriever.runnable))
+
 		self.relevance_chain = None 
 		self.generate_chain = None
 
 		# runnable is a graph in this case
-		self.runnable = None 
 		self._configured = False
 		self._built = False  
-
 		self.chat_model = chat_model 
-		self.embedding_model = embedding_model 
-		self.splitter = RecursiveCharacterTextSplitter(chunk_size = chunk_size,
-						 chunk_overlap = chunk_overlap, add_start_index = True)
-
-		self.split_docs = pdf_file 
-	
+		
 	@property 
 	def configured(self):
 		return self._configured 
@@ -509,28 +508,6 @@ class AgenticRAG:
 		if self._built is False and status is True:
 			self._built = True 
 	
-	def __setattr__(self, name: str, value: Any) -> None:
-		if name == 'split_docs':
-			value_path = Path(value)
-			if value_path.exists() and value_path.is_file() and '.pdf' in value:
-				pages = pdf.PyMuPDFLoader(value, extract_images = True)
-				if pages is not None:
-					pages = pages.load()
-					pages = self.splitter.split_documents(pages)
-				super(AgenticRAG, self).__setattr__(name, pages)
-			else:
-				raise FileExistsError(f"pdf file {value} does not exist")
-		else:
-			super(AgenticRAG, self).__setattr__(name, value)
-	
-	def _configure_retriever(self) -> None:
-		vectorstore = Chroma.from_documents(documents = self.split_docs, collection_name = "rag-chroma", 
-								embedding = models.configure_embedding_model(self.embedding_model)) 
-		self.retriever = vectorstore.as_retriever()
-	
-	def _configure_retriever_tool(self) -> None:
-		self.retriever_tool = RetrieverTool(retriever = RetrieverRunnable(retriever = self.retriever))
-
 	def _configure_relevance_check_chain(self) -> None:
 		llm = models.configure_chat_model(self.chat_model, temperature = 0)
 		model_with_struct = llm.with_structured_output(RelevanceGrader)
@@ -616,8 +593,6 @@ class AgenticRAG:
 		return {"messages": [response]}
 	
 	def configure(self) -> None:
-		self._configure_retriever()
-		self._configure_retriever_tool()
 		self._configure_relevance_check_chain()
 		self._configure_generate_chain()
 		self._configured = True 
@@ -647,20 +622,18 @@ class AgenticRAG:
 		inputs = {"messages": [("user", query)]}
 		for output in self.runnable.stream(inputs, stream_mode = 'updates'):
 			for key, value in output.items():
-				pprint(f"Output from node '{key}':")
-				pprint(" >>> <<<")
-				pprint(value, indent=2, width=80, depth=None)
-				pprint("\n---\n")
+				if key == 'generate':
+					print(value["messages"][-1])
+					pprint("\n---\n")
 	
 	def _run(self, query: str) -> str:
 		inputs = {"messages": [(query),]}
-		output = self.runnable.invoke(inputs, stream_mode= "values")
+		output = self.runnable.invoke(inputs, stream_mode= "updates")
 		return output["messages"][-1].content 
 	
 	def run(self, query: str, stream: bool = False) -> Union[str, None]:
 		if not self._built:
 			self.build()
-
 		if not stream:
 			return self._run(query)
 		else:
