@@ -16,7 +16,7 @@ from arxiv import Search as ArSearch
 from arxiv import Client as ArClient    
 from serpapi import Client 
 from semanticscholar import SemanticScholar 
-from pydantic import BaseModel, Field, root_validator
+from pydantic import BaseModel, Field, root_validator, model_validator
 from langchain_core.tools import BaseTool, tool  
 from langchain_core.retrievers import BaseRetriever 
 from langchain_core.prompts import BasePromptTemplate, PromptTemplate, format_document  
@@ -44,7 +44,7 @@ class GoogleScholarSearch(BaseModel):
 	sepr_api_key: Optional[str] = None 
 	scholar_search_engine: Any 
 
-	@root_validator(pre = True)
+	@model_validator(mode = 'before')
 	def validate_environment_and_key(cls, values: Dict) -> Dict:
 		serp_api_key = values.get('serp_api_key')
 		if serp_api_key is None:
@@ -71,35 +71,32 @@ class GoogleScholarSearch(BaseModel):
 		return parsed_results 
 	
 	def run(self, query: str) -> str:
+		"""
+		note that each page contains 10 results
+		and each search return maximum of 20 results. 
+		Hence: start and num parameter values
+		"""
 		page = 0
 		all_results = []
-		while page < max((self.top_k_results - 20), 1):
+		while True:
 			organic_results = (self.scholar_search_engine.search({"engine": "google_scholar"
-						,"q": query, "start": page, "hl": "en",
-                        "num": min( self.top_k_results, 20), "lr": "lang_en"}).get("organic_results", []))
+							,"q": query, "start": page, "hl": "en",
+                	        "num": 20, "lr": "lang_en"}).get("organic_results", []))
 			for result in organic_results:
 				fields = self._get_results(result)
 				all_results.append(fields)
-			
-			if not organic_results:  
-				break
-			page += 20
-		if (self.top_k_results % 20 != 0 and page > 20 and all_results):  # From the last page we would only need top_k_results%20 results
-			organic_results = (self.search_scholar_engine.search({"engine":"google_scholar",
-							 "q": query,"start": page,
-					"num": self.top_k_results % 20,
-					 "hl": "en", "lr": "lang_en"}).get("organic_results", []))
-			for result in organic_results:
-				fields = self._get_results(result)
-				all_results.append(fields)
+			if len(all_results) >= self.top_k_results:
+				break 
+			page += 10
+		
 		if not all_results:
 			return "No good Google Scholar Result was found"
-
+		
 		docs = ["******************* \n"
             f"Title: {result.get('Title','')}\n"
-            f"Authors: {result.get('Authors')}\n"  # noqa: E501
+            f"Authors: {result.get('Authors')}\n"  
             f"Citation Count: {result.get('Citation Count')}\n"
-            f"PDF Link: {result.get('PDF Link')}"  # noqa: E501
+            f"PDF Link: {result.get('PDF Link')}"  
             for result in all_results
         ]
 		return "\n\n".join(docs)
@@ -121,7 +118,6 @@ class GoogleScholarTool(BaseTool):
 		"""
 		Use the tool
 		"""
-		print('query is', query)
 		search_results = self.api_wrapper.run(query)
 		if self.save_path is not None:
 			with open(path.join(self.save_path, 'scholar_analytics_results.txt'), 'a') as f:
