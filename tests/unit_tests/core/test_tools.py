@@ -1,7 +1,7 @@
 import unittest
 from shutil import rmtree 
 from os import path, getcwd, makedirs  
-from peruse.core.tools import GoogleScholarSearch, GoogleScholarTool
+from peruse.core.tools import GoogleScholarSearch, GoogleScholarTool, PatentSearch
 
 
 def test_google_scholar_search_for_top_k_result_values():
@@ -13,7 +13,10 @@ def test_google_scholar_search_for_top_k_result_values():
 
 def test_google_partent_search_for_max_number_of_patents():
 	""" tests the number of patents collected in each search """
-	pass 
+	for k in range(20, 100, 20):
+		google_patent_search = PatentSearch(max_number_of_patents = k)
+		results = google_patent_search.run('direct air capture')
+		assert len(results.split("\n\n")) > k
 
 class TestGoogleTools(unittest.TestCase):
 	@classmethod 

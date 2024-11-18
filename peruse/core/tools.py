@@ -191,11 +191,11 @@ class PatentSearch(BaseModel):
 			in the environment
 		patent_search_engine: serpapi Client object with engine defined as google_patents 
 	"""
-	max_number_of_pages: int = 10 
+	max_number_of_results: int = 10 
 	serp_api_key: Optional[str] = None 
 	patent_search_engine: Any 
 
-	@root_validator(pre = True)
+	@model_validator(mode = 'before')
 	def validate_environment_and_key(cls, values: Dict) -> Dict:
 		serp_api_key = values.get('serp_api_key')
 		if serp_api_key is None:
@@ -209,20 +209,22 @@ class PatentSearch(BaseModel):
 		search_inputs = {"engine": "google_patents",
                             "q": query,
                              "page": 1, 
+							'num': 100,
                                 "country": "US"}
-
-		for _ in range(self.max_number_of_pages):
+		
+		while len(patent_data) < self.max_number_of_results:
 			organic_results = self.patent_search_engine.search(search_inputs)["organic_results"]
 			for result in organic_results:
 				data = {"title": result.get("title"), "patent_id": result.get("patent_id"), 
-                        "pdf": result.get("pdf"),
-                "priority_date": result.get("priority_date"), "filing_date": result.get("filing_date"), 
-                "grant_date": result.get("grant_date"), "publication_date": result.get("publication_date"), 
-                    "inventor": result.get("inventor"), "assignee": result.get("assignee")}
-            
-			search_inputs["page"] += 1
-			patent_data.append(data)
-		
+                        "pdf": result.get("pdf"), "priority_date": result.get("priority_date"), 
+							"filing_date": result.get("filing_date"), "grant_date": result.get("grant_date"), 
+								"publication_date": result.get("publication_date"), 
+									"inventor": result.get("inventor"), "assignee": result.get("assignee")}
+				patent_data.append(data) 
+				search_inputs["page"] += 1
+				if len(patent_data) >= self.max_number_of_results:
+					break 
+
 		patents = [f"""Title: {data.get("title")} \n
                     PDF: {data.get("pdf")} \n
                     Patent ID: {data.get("patent_id")} \n
@@ -630,7 +632,7 @@ def get_tool(tool_name: str, tools_kwargs: Dict) -> BaseTool:
 				save_path = tools_kwargs.get('save_path', path.join(os.getcwd(), 'pdfs')))
 	
 	elif tool_name == 'google_patent_search':
-		return GooglePatentTool(api_wrapper = PatentSearch(max_number_of_pages = tools_kwargs.get('max_results', 20), 
+		return GooglePatentTool(api_wrapper = PatentSearch(max_number_of_results = tools_kwargs.get('max_results', 20), 
 				save_path = tools_kwargs.get('save_path', path.join(os.getcwd(), 'pdfs'))))
 
 	elif tool_name == 'pdf_download':
