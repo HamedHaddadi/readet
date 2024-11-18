@@ -1,7 +1,7 @@
 import unittest
 from shutil import rmtree 
 from os import path, getcwd, makedirs  
-from peruse.core.tools import GoogleScholarSearch, GoogleScholarTool, PatentSearch
+from peruse.core.tools import GoogleScholarSearch, GoogleScholarTool, PatentSearch, GooglePatentTool
 
 
 def test_google_scholar_search_for_top_k_result_values():
@@ -26,7 +26,7 @@ class TestGoogleTools(unittest.TestCase):
 			makedirs(save_path)
 		cls.save_path = save_path 
 		cls.scholar_api = GoogleScholarSearch(top_k_results = 20)
-	
+		cls.patent_api = PatentSearch(max_number_of_patents = 20)
 	@classmethod
 	def tearDownClass(cls):
 		rmtree(cls.save_path)
@@ -37,6 +37,11 @@ class TestGoogleTools(unittest.TestCase):
 		scholar_tool.invoke("finite inertial suspensions")
 		self.assertTrue(path.exists(path.join(self.save_path, 'scholar_analytics_results.txt'))) 
 
+	def test_google_patent_tool_saves_search_analytics(self):
+		patent_tool = GooglePatentTool(api_wrapper = self.patent_api, 
+								   		save_path = self.save_path)
+		patent_tool.invoke("direct air capture")
+		self.assertTrue(path.exists(path.join(self.save_path, 'patents_analytics_results.txt'))) 
 
 
 
