@@ -11,6 +11,20 @@ def test_google_scholar_search_for_top_k_result_values():
 		results = google_scholar_search.run('finite inertia suspensions')
 		assert len(results.split("\n\n")) == k
 
+def test_google_scholar_search_for_pdf_link_for_various_topics(random_topic):
+
+	google_scholar_search = GoogleScholarSearch(top_k_results = 20)
+	results = google_scholar_search.run(random_topic)
+	results = results.split("\n\n")
+	sum = 0
+	for result in results:
+		result_lines = result.split("\n")
+		for line in result_lines:
+			if "PDF Link: https://" in line:
+				sum += 1
+	assert sum > 0
+
+
 def test_google_partent_search_for_max_number_of_patents():
 	""" tests the number of patents collected in each search """
 	for k in range(20, 100, 20):

@@ -64,7 +64,7 @@ class GoogleScholarSearch(BaseModel):
 		parsed_results["Citation Count"] = results["inline_links"]["cited_by"]["total"]
 		resources = results.get("resources", None)
 		if resources is not None:
-			if resources[0]["file_format"] == "PDF":
+			if 'file_format' in resources[0].keys() and resources[0]["file_format"] == "PDF":
 				parsed_results["PDF Link"] = resources[0]["link"]
 		else:
 			parsed_results["PDF Link"] = "None"
@@ -367,7 +367,7 @@ class PDFSummary(BaseModel):
 	summarizer_type: Literal['plain'] = 'plain'
 	chat_model: str = Field(description = "the chat model", default = 'openai-gpt-4o-mini')
 
-	@root_validator(pre = True)
+	@model_validator(mode = 'before')
 	def setup_summarizer(cls, values: Dict) -> Dict:
 		values['summarizer'] = SUMMARIZERS[values.get('summarizer_type', 'plain')](chat_model = values.get('chat_model', 'openai-gpt-4o-mini'))
 		return values 
@@ -390,7 +390,7 @@ class PDFSummaryTool(BaseTool):
 	path_to_summaries: Optional[str] = Field(description = "path to the directory/folder to store the summaries", default = None)
 	summarizer: PDFSummary = Field(description = "the summarizer model")
 
-	@root_validator(pre = True)
+	@model_validator(mode = 'before')
 	def validate_path_to_summaries(cls, values: Dict) -> Dict:
 		path_to_summaries = path.join(values.get('path_to_files'), 'summaries')
 		if not path.exists(path_to_summaries):

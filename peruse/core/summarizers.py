@@ -1,7 +1,7 @@
 # ########################################################## #
 # All agents and LangGraph based agents for summary creation #
 # ########################################################## #
-from typing import Optional, List, TypeVar, Union
+from typing import  List, TypeVar, Literal, Dict, Any
 from collections.abc import Callable 
 from langchain_text_splitters import CharacterTextSplitter 
 from langchain_core.prompts import PromptTemplate 
@@ -16,20 +16,24 @@ from .. utils import prompts, models, docs
 #  		text summary tools		          #
 # ####################################### #
 # plain text summarizer
-PS = TypeVar('PS', bound = 'PlainSummarizer')
+PLAIN_SUMMARY_PROMPT = """
+	you will be provided with a text. Write a concise summary and include the main points.
+		{text} """
 class PlainSummarizer(Callable):
 	"""
-	generates summary of a text using a simple (prompt | llm) chain
-	it can be instantiated from a pdf file
+	uses a simple (prompt | llm) chain to generate a summary of a text
 	"""
 	def __init__(self, chat_model: str = 'openai-gpt-4o-mini', temperature: int = 0):
 		llm = models.configure_chat_model(chat_model, temperature = temperature)
-		template = prompts.PLAIN_SUMMARY 
+		template = PLAIN_SUMMARY_PROMPT 
 		prompt = PromptTemplate.from_template(template)
 		self.chain = (prompt | llm)
 
-	def __call__(self, pdf_file: str) -> str:
-		document = docs.load_and_split_pdf(pdf_file)
+	def __call__(self, pdf_file: str | List[str], document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
+					splitter: Literal['recursive', 'token'] | None = 'recursive', 
+						splitter_kwargs: Dict[str, Any] = {}) -> str:
+		document = docs.doc_from_pdf_files(pdf_file, document_loader = document_loader, 
+									 	splitter = splitter, splitter_kwargs = splitter_kwargs)
 		if document is not None:
 			return self.chain.invoke(document).content 
 		else:
@@ -52,7 +56,6 @@ def refine_pdf_summary(pdf_file: str, chat_model: str = 'openai-gpt-4o-mini',
 		return ""
 
 # MapReduce Summarizer 
-MR = TypeVar('MR', bound = 'MapReduceSummary')
 class MapReduceSummary(Callable):
 	"""
 	uses a MapReduce approach to generate a summary of the input text
@@ -80,23 +83,14 @@ class MapReduceSummary(Callable):
     						document_variable_name = 'docs', 
     							return_intermediate_steps = False)
 	
-	@staticmethod
-	def _load_and_split_pdf(pdf_file: str, chunk_size: int = 1000, chunk_overlap: int = 0) -> List:
-		documents = docs.load_and_split_pdf(pdf_file, split = False)
-		if documents is not None:
-			text_splitter = CharacterTextSplitter.from_tiktoken_encoder(chunk_size = chunk_size, 
-							chunk_overlap = chunk_overlap)
-			split_docs = text_splitter.split_documents(documents)
-			return split_docs
-		else:
-			return None 
+	def __call__(self, pdf_file: str | List[str], document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
+					splitter: Literal['recursive', 'token'] | None = 'recursive', 
+						splitter_kwargs: Dict[str, Any] = {}) -> str:
+		documents = docs.doc_from_pdf_files(pdf_file, document_loader = document_loader, 
+									 	splitter = splitter, splitter_kwargs = splitter_kwargs)
+		return self.map_reduce_chain.invoke(documents)["output_text"] if documents is not None else ""
 
-	def __call__(self, pdf_file: str, chunk_size: int = 1000, chunk_overlap: int = 0) -> str:
-		split_docs = self._load_and_split_pdf(pdf_file, chunk_size = chunk_size, 
-											chunk_overlap = chunk_overlap)
-		return self.map_reduce_chain.invoke(split_docs)["output_text"] if split_docs is not None else ""
 
-	
 SUMMARIZERS = {"plain": PlainSummarizer, 
 					"map-reduce": MapReduceSummary}
 

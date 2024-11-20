@@ -15,7 +15,7 @@ from langchain_chroma import Chroma
 from langchain.retrievers import ContextualCompressionRetriever, ParentDocumentRetriever
 from langchain.retrievers.document_compressors import LLMChainExtractor
 from langchain_openai import OpenAI
-from .. utils import models 
+from .. utils import models, docs
 
 # ######################################### #
 # helper functions						    #
@@ -24,33 +24,6 @@ from .. utils import models
 def format_documents(documents: List[Document]) -> str:
 	return f"\n {'-' * 100} \n".join([f"Document {i + 1}: \n\n" + 
 								   	d.page_content for i, d in enumerate(documents)])
-
-def doc_from_pdf_files(pdf_files: Union[str, List[str]], 
-						document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
-						splitter: Literal['recursive', 'token'] | None = 'recursive',
-						splitter_kwargs: Dict[str, Any] = {}) -> List[Document]:
-	
-	loader_obj = {'pypdf': PyPDFLoader, 'pymupdf': pdf.PyMuPDFLoader}[document_loader]		
-	if splitter == 'recursive':
-		chunk_size = splitter_kwargs.get('chunk_size', 2000)
-		chunk_overlap = splitter_kwargs.get('chunk_overlap', 200) 
-		splitter = RecursiveCharacterTextSplitter(separators = None, 
-						chunk_size = chunk_size, 
-								chunk_overlap = chunk_overlap, add_start_index = True)
-	elif splitter == 'token':
-		splitter = TokenTextSplitter()
-
-	documents = []
-	if not isinstance(pdf_files, (list, tuple)):
-		pdf_files = [pdf_files]
-
-	if splitter is not None:
-		for pdf_file in pdf_files:
-			documents.extend(loader_obj(pdf_file, extract_images = True).load_and_split(splitter))
-	else:
-		for pdf_file in pdf_files:
-			documents.extend(loader_obj(pdf_file, extract_images = True).load())
-	return documents
 
 # ######################################### #
 # Retrievers base class						#
@@ -120,7 +93,7 @@ class PlainRetriever(Retriever):
 				splitter: Literal['recursive', 'token'] = 'recursive',
 				splitter_kwargs: Dict[str, Any] = {}) -> None:
 		self.built = False 
-		documents = doc_from_pdf_files(pdf_files, document_loader, splitter, splitter_kwargs)
+		documents = docs.doc_from_pdf_files(pdf_files, document_loader, splitter, splitter_kwargs)
 		self.vector_store.add_documents(documents) 
 		_ = self.build()
 		self.built = True  
@@ -131,7 +104,7 @@ class PlainRetriever(Retriever):
 				document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 				splitter: Literal['recursive', 'token'] = 'recursive',
 				splitter_kwargs: Dict[str, Any] = {}) -> PR:
-		documents = doc_from_pdf_files(pdf_files, document_loader, splitter, splitter_kwargs)
+		documents = docs.doc_from_pdf_files(pdf_files, document_loader, splitter, splitter_kwargs)
 		return cls(documents, embeddings)
 
 
@@ -170,7 +143,7 @@ class ContextualCompression(Retriever):
 				splitter: Literal['recursive', 'token'] = 'recursive',
 				splitter_kwargs: Dict[str, Any] = {}) -> None:
 		self.built = False 
-		documents = doc_from_pdf_files(pdf_files, document_loader, splitter, splitter_kwargs)
+		documents = docs.doc_from_pdf_files(pdf_files, document_loader, splitter, splitter_kwargs)
 		self.base_retriever.vector_store.add_documents(documents)
 		self.build()
 		self.built = True  
@@ -184,7 +157,7 @@ class ContextualCompression(Retriever):
 				k: int = 5, lambda_mult: float = 0.5, fetch_k: int = 20,
 			   	splitter_kwargs: Dict[str, Any] = {}) -> CC:
 		
-		documents = doc_from_pdf_files(pdf_files, document_loader, splitter, splitter_kwargs)
+		documents = docs.doc_from_pdf_files(pdf_files, document_loader, splitter, splitter_kwargs)
 		return cls(documents, embeddings = embeddings, search_type = search_type,
 					k = k, lambda_mult = lambda_mult, fetch_k = fetch_k)
 
@@ -239,7 +212,7 @@ class ParentDocument(Retriever):
 				splitter: Literal['recursive', 'token'] = 'recursive',
 				splitter_kwargs: Dict[str, Any] = {}) -> None:
 		self.built = False 
-		documents = doc_from_pdf_files(pdf_files, document_loader, splitter, splitter_kwargs)
+		documents = docs.doc_from_pdf_files(pdf_files, document_loader, splitter, splitter_kwargs)
 		self.documents.extend(documents) 
 		_ = self.build()
 		self.built = True  
@@ -253,7 +226,7 @@ class ParentDocument(Retriever):
 						child_splitter: Literal['recursive', 'token'] = 'recursive',
 							splitter_kwargs: Dict[str, Any] = {}) -> PD:
 		
-		documents = doc_from_pdf_files(pdf_files,
+		documents = docs.doc_from_pdf_files(pdf_files,
 			document_loader = document_loader, splitter = None)
 		return cls(documents, embeddings = embeddings, store = store, 
 					parent_splitter = parent_splitter, child_splitter = child_splitter, 

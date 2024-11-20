@@ -1,6 +1,7 @@
 from langchain_community.document_loaders import PyPDFLoader, pdf
-from langchain_core.documents.base import Document  
-from typing import Dict, List, Union
+from langchain_core.documents.base import Document 
+from langchain_text_splitters import RecursiveCharacterTextSplitter, TokenTextSplitter
+from typing import Dict, List, Union, Literal, Any
 from os import PathLike
 from pathlib import Path    
 
@@ -46,10 +47,34 @@ def load_and_split_pdf(pdf_file: str, split = True) -> Union[List, None]:
 		except:
 			return None
 
-def load_pdf_with_images(pdf_file: str) -> Union[List, None]:
-	loader = PyPDFLoader(pdf_file, extract_images = True)
-	docs = loader.load_and_split()
-	return docs 
+
+def doc_from_pdf_files(pdf_files: Union[str, List[str]], 
+						document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
+						splitter: Literal['recursive', 'token'] | None = 'recursive',
+						splitter_kwargs: Dict[str, Any] = {}) -> List[Document]:
+	
+	loader_obj = {'pypdf': PyPDFLoader, 'pymupdf': pdf.PyMuPDFLoader}[document_loader]		
+	if splitter == 'recursive':
+		chunk_size = splitter_kwargs.get('chunk_size', 2000)
+		chunk_overlap = splitter_kwargs.get('chunk_overlap', 200) 
+		splitter = RecursiveCharacterTextSplitter(separators = None, 
+						chunk_size = chunk_size, 
+								chunk_overlap = chunk_overlap, add_start_index = True)
+	elif splitter == 'token':
+		splitter = TokenTextSplitter()
+
+	documents = []
+	if not isinstance(pdf_files, (list, tuple)):
+		pdf_files = [pdf_files]
+
+	if splitter is not None:
+		for pdf_file in pdf_files:
+			documents.extend(loader_obj(pdf_file, extract_images = True).load_and_split(splitter))
+	else:
+		for pdf_file in pdf_files:
+			documents.extend(loader_obj(pdf_file, extract_images = True).load())
+	return documents
+
 
 def text_from_pdf(document: Union[str, PathLike]) -> Union[str, None]:
 	doc_path = Path(document)
