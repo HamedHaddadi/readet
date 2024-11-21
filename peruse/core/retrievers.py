@@ -31,18 +31,7 @@ def format_documents(documents: List[Document]) -> str:
 class Retriever(metaclass = ABCMeta):
 	def __init__(self):
 		self.runnable = None 
-		self._built = False 
-	
-	@property
-	def built(self) -> bool:
-		return self._built
-	
-	@built.setter
-	def built(self, value: bool) -> None:
-		if self._built is False and value is True:
-			self._built = True
-		elif self._built is True and value is False:
-			self._built = False 
+		self.built = False 
 	
 	@abstractmethod
 	def build(self):
@@ -57,7 +46,7 @@ class Retriever(metaclass = ABCMeta):
 	
 	def run(self, query: str) -> str:
 		if self.built is False:
-			_ = self.build()
+			self.build()
 		docs = self.runnable.invoke(query)
 		return format_documents(docs)
 	
@@ -82,21 +71,18 @@ class PlainRetriever(Retriever):
 		self.runnable = None 
 	
 	def build(self, search_type: Literal["mmr", "similarity"] = "similarity", 
-				k: int = 5, lambda_mult: float = 0.5, fetch_k: int = 20) -> VectorStoreRetriever:
+				k: int = 5, lambda_mult: float = 0.5, fetch_k: int = 20) -> None:
 		self.runnable = self.vector_store.as_retriever(search_type = search_type, k = k, 
 												  lambda_mult = lambda_mult, fetch_k = fetch_k)
 		self.built = True 
-		return self.runnable
 	
 	def add_pdf(self, pdf_files: List[str] | str, 
 			 	document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 				splitter: Literal['recursive', 'token'] = 'recursive',
 				splitter_kwargs: Dict[str, Any] = {}) -> None:
-		self.built = False 
 		documents = docs.doc_from_pdf_files(pdf_files, document_loader, splitter, splitter_kwargs)
 		self.vector_store.add_documents(documents) 
-		_ = self.build()
-		self.built = True  
+		self.build()
 	
 	@classmethod
 	def from_pdf(cls, pdf_files: Union[str, List[str]], 

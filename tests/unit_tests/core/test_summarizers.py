@@ -11,11 +11,19 @@ def test_plain_summarizer_for_pdf_inputs(single_pdf_file, pdf_file_list):
 	assert isinstance(summary, str)
 
 
-@pytest.mark.skip(reason = "MapReduceSummary is being transfered to LangGraph version")
-def test_map_reduce_for_pdf_inputs(single_pdf_file, pdf_file_list):	
+def test_map_reduce_build():
 	map_reduce_summarizer = MapReduceSummary()
-	for pdf_file in pdf_file_list:
-		summary = map_reduce_summarizer(pdf_file)
-		assert isinstance(summary, str)
+	map_reduce_summarizer.build()
+	assert map_reduce_summarizer.runnable is not None 
+
+def test_map_reduce_single_pdf_input(single_pdf_file):
+	map_reduce_summarizer = MapReduceSummary()
+	map_reduce_summarizer.build()
 	summary = map_reduce_summarizer(single_pdf_file)
+	assert isinstance(summary, str)
+
+def test_map_reduce_multiple_pdf_inputs(pdf_file_list):
+	map_reduce_summarizer = MapReduceSummary()
+	map_reduce_summarizer.build()
+	summary = map_reduce_summarizer(pdf_file_list)
 	assert isinstance(summary, str)

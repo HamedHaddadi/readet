@@ -1,9 +1,11 @@
+import pytest 
 import unittest
 from shutil import rmtree 
 from os import path, getcwd, makedirs  
 from peruse.core.tools import GoogleScholarSearch, GoogleScholarTool, PatentSearch, GooglePatentTool
 
 
+@pytest.mark.skip(reason = "tested and to avoid exhausting API calls")
 def test_google_scholar_search_for_top_k_result_values():
 	""" tests the output of search for various top_k_results """
 	for k in range(20, 100, 20):
@@ -11,6 +13,7 @@ def test_google_scholar_search_for_top_k_result_values():
 		results = google_scholar_search.run('finite inertia suspensions')
 		assert len(results.split("\n\n")) == k
 
+@pytest.mark.skip(reason = "tested and to avoid exhausting API calls")
 def test_google_scholar_search_for_pdf_link_for_various_topics(random_topic):
 
 	google_scholar_search = GoogleScholarSearch(top_k_results = 20)
@@ -25,6 +28,7 @@ def test_google_scholar_search_for_pdf_link_for_various_topics(random_topic):
 	assert sum > 0
 
 
+@pytest.mark.skip(reason = "tested and to avoid exhausting API calls")
 def test_google_partent_search_for_max_number_of_patents():
 	""" tests the number of patents collected in each search """
 	for k in range(20, 100, 20):
@@ -32,6 +36,7 @@ def test_google_partent_search_for_max_number_of_patents():
 		results = google_patent_search.run('direct air capture')
 		assert len(results.split("\n\n")) > k
 
+@pytest.mark.skip(reason = "tested and to avoid exhausting API calls")
 class TestGoogleTools(unittest.TestCase):
 	@classmethod 
 	def setUpClass(cls):
