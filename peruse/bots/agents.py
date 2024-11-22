@@ -261,30 +261,7 @@ class PlanExecute:
 						pprint(value)
 
 
-# React graph with error handling mechanism
-def handle_tool_errors(state: TypedDict) -> Dict:
-	"""
-	function to handle tool errors during tool execution
-	Args:
-		state: the current state of the AI agent which contains AI Messages and tool_calls. 
-	Returns:
-		dict: A dictionary containing error messages for each tool  
-	"""
-	error = state.get("error")
-	tool_calls = state["messages"][-1].tool_calls 
 
-	return {"messages": [ToolMessage(content = f"Error: {repr(error)} \n Take steps to fix errors!", 
-										tool_call_id = tc["id"]) for tc in tool_calls]}
-
-def tool_node_with_error_handling(tools: List) -> ToolNode:
-	"""
-	function to generate tool nodes with error handling mechanism
-	Args:
-		tools: the list of tools
-	Returns:
-		Toolnode with error handling mechanism
-	""" 
-	return ToolNode(tools).with_fallbacks([RunnableLambda(handle_tool_errors)], exception_key = "error")
 
 
 
