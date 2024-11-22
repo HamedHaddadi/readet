@@ -142,7 +142,6 @@ class MapReduceSummary(Callable):
 		return step["generate_final_summary"]["final_summary"]
 			
 
-	
 
 SUMMARIZERS = {"plain": PlainSummarizer, 
 					"map-reduce": MapReduceSummary}

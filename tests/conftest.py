@@ -1,5 +1,6 @@
 import pytest 
-from os import path, listdir, getcwd 
+from shutil import rmtree
+from os import path, listdir, getcwd, makedirs, rmdir 
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -14,6 +15,7 @@ def pdf_file_list():
 def single_pdf_file(pdf_file_list):
 	return pdf_file_list[0]
 
+
 @pytest.fixture
 def random_topic():
 	prompt = ChatPromptTemplate.from_template(
@@ -21,6 +23,7 @@ def random_topic():
 	llm = ChatOpenAI(model_name = 'gpt-4o-mini', temperature = 0)
 	response = prompt | llm
 	return response.invoke({"topic": None}).content
+
 
 
 
