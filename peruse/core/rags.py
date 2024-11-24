@@ -119,6 +119,54 @@ class PlainRAG(Callable):
 	def __call__(self, query: str) -> str:
 		return self.run(query)
 
+# ################################### #
+# RAG with Citations 				  #
+# ################################### #
+class AnswerWithCitations(TypedDict):
+	"""Answer to the question with citations"""
+	answer: str 
+	citations: Annotated[List[str], "List of citations (authors and year and publication info) used to answer the question."]
+
+class RAGWithCitations(PlainRAG):
+	"""
+	RAG with citations class; 
+	class inherits from PlainRAG class and accepts identical parameters
+		Main methods:
+			build(self): builds the RAG chain
+			run(self, query: str): invokes the RAG chain
+			__call__(self, query: str): invokes the RAG chain
+	"""
+	def __init__(self, documents: List[Document] | List[str] | str, retriever: Literal['plain', 'contextual-compression', 'parent-document'] = 'contextual-compression', 
+				embeddings: str = 'openai-text-embedding-3-large', 
+					chat_model: str = 'openai-gpt-4o-mini',
+						prompt: Optional[str] = 'rag',
+					document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf', 
+						splitter: Literal['recursive', 'token'] = 'recursive',
+							kwargs: Dict[str, Any] = {}):
+		super(RAGWithCitations, self).__init__(documents, retriever, embeddings, chat_model, prompt, document_loader, splitter, kwargs)
+
+	@staticmethod
+	def _format_docs(docs: List[Document]) -> str:
+		return "\n\n".join(doc.page_content for doc in docs)
+
+	def build(self) -> None:
+		rag_chain = ({"question": lambda x: x["question"], 
+						"context": lambda x: self._format_docs(x["context"])} | self.prompt | self.llm.with_structured_output(AnswerWithCitations))
+		retrieve_context_chain = (lambda x: x["question"]) | self.retriever.runnable 
+		self.runnable = RunnablePassthrough.assign(context = retrieve_context_chain).assign(answer = rag_chain)
+		self.built = True 
+	
+	def run(self, query: str, parse = False) -> str:
+		if self.built is False:
+			self.build()
+		response = self.runnable.invoke({"question": query})
+		if parse:
+			response =  response["answer"]["answer"], response["answer"]["citations"]
+		return response 
+	
+	def __call__(self, query: str, parse = False) -> str:
+		return self.run(query, parse)
+	
 
 # #################################### #
 # 	Structured Outputs				   #

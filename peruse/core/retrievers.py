@@ -160,7 +160,8 @@ class ParentDocument(Retriever):
 				store: str = "memory",
 				parent_splitter: Literal['recursive', 'token'] = 'token', 
 			  	child_splitter: Literal['recursive', 'token'] = 'recursive', 
-					splitter_kwargs: Dict[str, Any] = {}):
+					parent_chunk_size: int = 2000, parent_chunk_overlap: int = 200,
+						child_chunk_size: int = 2000, child_chunk_overlap: int = 100):
 		
 		super().__init__()
 		self.parent_splitter = None 
@@ -168,15 +169,15 @@ class ParentDocument(Retriever):
 
 		if parent_splitter == 'recursive':
 			self.parent_splitter = RecursiveCharacterTextSplitter(separators = None, 
-				chunk_size = splitter_kwargs.get('parent_chunk_size', 2000), 
-				chunk_overlap = splitter_kwargs.get('parent_chunk_overlap', 200), add_start_index = True)
+				chunk_size = parent_chunk_size, 
+				chunk_overlap = parent_chunk_overlap, add_start_index = True)
 		elif parent_splitter == 'token':
 			self.parent_splitter = TokenTextSplitter()
 		
 		if child_splitter == 'recursive':
 			self.child_splitter = RecursiveCharacterTextSplitter(separators = None, 
-				chunk_size = splitter_kwargs.get('child_chunk_size', 2000), 
-				chunk_overlap = splitter_kwargs.get('child_chunk_overlap', 100), add_start_index = True)
+				chunk_size = child_chunk_size, 
+				chunk_overlap = child_chunk_overlap, add_start_index = True)
 		elif child_splitter == 'token':
 			self.child_splitter = TokenTextSplitter()
 				
@@ -210,13 +211,15 @@ class ParentDocument(Retriever):
 				document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 					parent_splitter: Literal['recursive', 'token'] = 'recursive', 
 						child_splitter: Literal['recursive', 'token'] = 'recursive',
-							splitter_kwargs: Dict[str, Any] = {}) -> PD:
+							parent_chunk_size: int = 2000, parent_chunk_overlap: int = 200,
+								child_chunk_size: int = 2000, child_chunk_overlap: int = 100) -> PD:
 		
 		documents = docs.doc_from_pdf_files(pdf_files,
 			document_loader = document_loader, splitter = None)
 		return cls(documents, embeddings = embeddings, store = store, 
 					parent_splitter = parent_splitter, child_splitter = child_splitter, 
-						splitter_kwargs = splitter_kwargs)
+						parent_chunk_size = parent_chunk_size, parent_chunk_overlap = parent_chunk_overlap, 
+							child_chunk_size = child_chunk_size, child_chunk_overlap = child_chunk_overlap)
 
 # ######################################### #
 # 	Retriever Factory						#
@@ -262,10 +265,16 @@ def get_retriever(documents: List[Document] | List[str] | str,
 				embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'),
 					document_loader = kwargs.get('document_loader', 'pypdf'),
 							parent_splitter = kwargs.get('parent_splitter', 'token'),
-								child_splitter = kwargs.get('child_splitter', 'recursive'), **kwargs)
+								child_splitter = kwargs.get('child_splitter', 'recursive'), 
+									parent_chunk_size = kwargs.get('parent_chunk_size', 2000), 
+										parent_chunk_overlap = kwargs.get('parent_chunk_overlap', 200),
+											child_chunk_size = kwargs.get('child_chunk_size', 2000), 
+												child_chunk_overlap = kwargs.get('child_chunk_overlap', 100))
 		else:
 			retriever = ParentDocument(documents, embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'), store = kwargs.get('store', 'memory'),
-				parent_splitter = kwargs.get('parent_splitter', 'token'), child_splitter = kwargs.get('child_splitter', 'recursive'))
+				parent_splitter = kwargs.get('parent_splitter', 'token'), child_splitter = kwargs.get('child_splitter', 'recursive'), 
+					parent_chunk_size = kwargs.get('parent_chunk_size', 2000), parent_chunk_overlap = kwargs.get('parent_chunk_overlap', 200),
+						child_chunk_size = kwargs.get('child_chunk_size', 2000), child_chunk_overlap = kwargs.get('child_chunk_overlap', 100))
 		retriever.build()
 		return retriever 
 	
