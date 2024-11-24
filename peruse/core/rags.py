@@ -48,6 +48,15 @@ class RetrieverTool(BaseTool):
 # ################################### #
 # Plain RAG  						  #
 # ################################### #
+PLAIN_RAG_PROMPT = """
+	You are an assistant for question-answering tasks. 
+		Use the following pieces of retrieved context to answer the question.
+		 If you don't know the answer, just say that you don't know. 
+		 	Use three sentences maximum and keep the answer concise.
+	Question: {question} 
+	Context: {context} 
+	Answer:
+"""
 class PlainRAG(Callable):
 	"""
 	Plain RAG class; 
@@ -81,23 +90,12 @@ class PlainRAG(Callable):
 		self.llm = models.configure_chat_model(chat_model, temperature = 0) 
 		self.prompt = prompt 
 		self.runnable = None  
-		self._built = False 
+		self.built = False 
 	
-	@property 
-	def built(self):
-		return self._built 
-
-	@built.setter 
-	def built(self, status: bool):
-		if status is True and self._built is False:
-			self._built = True 
-		elif status is False and self._built is True:
-			self._built = False 
-
 	def __setattr__(self, name: str, value: Any) -> None:
 		if name == 'prompt':
 			if value in ['rag']:
-				template = prompts.TEMPLATES['rag']
+				template = PLAIN_RAG_PROMPT
 				super(PlainRAG, self).__setattr__(name, ChatPromptTemplate.from_template(template))
 			elif isinstance(value, str) and len(value.split(' ')) > 1:
 				super(PlainRAG, self).__setattr__(name, value)
@@ -111,11 +109,10 @@ class PlainRAG(Callable):
 
 	def build(self) -> None:
 		self.runnable = ({'context': self.retriever.runnable, 'question': RunnablePassthrough()} | self.prompt | self.llm | StrOutputParser())
-		self._built = True 
+		self.built = True 
 
 	def run(self, query: str) -> str:
 		if self.built is False:
-			self.built = True 
 			self.build()
 		return self.runnable.invoke(query)
 
