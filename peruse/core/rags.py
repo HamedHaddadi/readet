@@ -161,7 +161,7 @@ class RAGWithCitations(PlainRAG):
 			self.build()
 		response = self.runnable.invoke({"question": query})
 		if parse:
-			response =  response["answer"]["answer"], response["answer"]["citations"]
+			response =  response["answer"]["answer"], response["answer"]["citations"][0]
 		return response 
 	
 	def __call__(self, query: str, parse = False) -> str:
