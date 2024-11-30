@@ -40,7 +40,7 @@ class GoogleScholarSearch(BaseModel):
 			in the environment
 		scholar_search_engine: serpapi GoogleScholarSearch class
 	"""
-	top_k_results: int = 20
+	top_k_results: int 
 	sepr_api_key: Optional[str] = None 
 	scholar_search_engine: Any 
 
@@ -85,12 +85,14 @@ class GoogleScholarSearch(BaseModel):
 			for result in organic_results:
 				fields = self._get_results(result)
 				all_results.append(fields)
+			page += 10
 			if len(all_results) >= self.top_k_results:
 				break 
-			page += 10
-		
+			
 		if not all_results:
-			return "No good Google Scholar Result was found"
+			return "No good Google Scholar Result was found" 
+		
+		print('the length of all results are ', len(all_results))
 		
 		docs = ["******************* \n"
             f"Title: {result.get('Title','')}\n"

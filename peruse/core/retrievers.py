@@ -4,9 +4,11 @@
 # level more abstraction than		#
 #  LangChain various retrievers		#
 # ################################# #
-from typing import List, Union, Literal, Dict, Any, TypeVar 
+from typing import List, Union, Literal, Dict, Any, TypeVar, Optional  
+from os import path, makedirs, listdir 
 from abc import ABCMeta, abstractmethod 
 from langchain_core.documents import Document
+from langchain_core.stores import BaseStore
 from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_community.document_loaders import PyPDFLoader, pdf
 from langchain_text_splitters import RecursiveCharacterTextSplitter, TokenTextSplitter
@@ -15,7 +17,7 @@ from langchain_chroma import Chroma
 from langchain.retrievers import ContextualCompressionRetriever, ParentDocumentRetriever
 from langchain.retrievers.document_compressors import LLMChainExtractor
 from langchain_openai import OpenAI
-from .. utils import models, docs
+from .. utils import models, docs, save_load
 
 # ######################################### #
 # helper functions						    #
@@ -37,6 +39,10 @@ class Retriever(metaclass = ABCMeta):
 	def build(self):
 		...
 	
+	@abstractmethod
+	def num_docs(self) -> int:
+		...
+
 	@abstractmethod
 	def add_pdf(self, pdf_files: List[str] | str, 
 			 	document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
@@ -84,6 +90,9 @@ class PlainRetriever(Retriever):
 		self.vector_store.add_documents(documents) 
 		self.build()
 	
+	def num_docs(self) -> int:
+		pass 
+	
 	@classmethod
 	def from_pdf(cls, pdf_files: Union[str, List[str]], 
 				embeddings: str = 'openai-text-embedding-3-large',
@@ -94,7 +103,6 @@ class PlainRetriever(Retriever):
 		return cls(documents, embeddings)
 
 
-		
 # ######################################### #
 # ContextualCompressionRetriever			#
 # ######################################### #
@@ -123,6 +131,9 @@ class ContextualCompression(Retriever):
 		self.runnable = ContextualCompressionRetriever(base_compressor = compressor, 
 												 base_retriever = self.base_retriever.runnable) 
 		self.built = True 
+	
+	def num_docs(self) -> int:
+		pass 
 	
 	def add_pdf(self, pdf_files: List[str] | str, 
 			 	document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
@@ -154,10 +165,13 @@ PD = TypeVar('PD', bound = 'ParentDocument')
 class ParentDocument(Retriever):
 	"""
 	Class that abstracts the Parent Document Retriever
+	store: an instance of BaseStore; if None, an in-memory store will be used
+	store_path: path to the directory where the vector store will be saved
 	"""
-	def __init__(self, documents: List[Document], 
+	def __init__(self, documents: Optional[List[Document]] = None, 
 				embeddings: str = 'openai-text-embedding-3-large',
-				store: str = "memory",
+				store: Optional[BaseStore] = None,
+				store_path: Optional[str] = None,
 				parent_splitter: Literal['recursive', 'token'] = 'token', 
 			  	child_splitter: Literal['recursive', 'token'] = 'recursive', 
 					parent_chunk_size: int = 2000, parent_chunk_overlap: int = 200,
@@ -166,6 +180,7 @@ class ParentDocument(Retriever):
 		super().__init__()
 		self.parent_splitter = None 
 		self.child_splitter = None 
+		self.add_documents_count = 0
 
 		if parent_splitter == 'recursive':
 			self.parent_splitter = RecursiveCharacterTextSplitter(separators = None, 
@@ -180,20 +195,41 @@ class ParentDocument(Retriever):
 				chunk_overlap = child_chunk_overlap, add_start_index = True)
 		elif child_splitter == 'token':
 			self.child_splitter = TokenTextSplitter()
-				
+		
+		# documents and vector store #
+		if store is None:
+			self.store = InMemoryStore()
+		else:
+			self.store = store
+
+		self.store_path = None 
+		if store_path is not None:
+			if not path.exists(store_path):
+				makedirs(store_path)
+			self.store_path = store_path
+
 		self.documents = documents
 		self.vector_store = Chroma(collection_name = "parent_document_retriever", 
-								embedding_function = models.configure_embedding_model(embeddings))
-		self.store = InMemoryStore() 
-	
-	def build(self) -> ParentDocumentRetriever:
+								embedding_function = models.configure_embedding_model(embeddings), 
+									persist_directory = store_path)
+		
+	def build(self) -> None:
 		self.runnable = ParentDocumentRetriever(vectorstore = self.vector_store, 
 												docstore = self.store, 
 												parent_splitter = self.parent_splitter, 
 												child_splitter = self.child_splitter, id_key = "doc_id")
-		self.runnable.add_documents(self.documents)
+		if self.documents is not None:
+			self.runnable.add_documents(self.documents)
+			self.add_documents_count += 1
+			if self.store_path is not None:
+				save_file = path.join(self.store_path, f"parent_document_retriever_{self.add_documents_count}.pkl")
+				save_load.save_to_pickle(self.runnable.docstore.store, save_file)
+		
 		self.built = True 
 	
+	def num_docs(self) -> int:
+		return len(self.runnable.docstore.store.values())
+		
 	def add_pdf(self, pdf_files: List[str] | str, 
 			 	document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 				splitter: Literal['recursive', 'token'] = 'recursive',
@@ -201,13 +237,13 @@ class ParentDocument(Retriever):
 		self.built = False 
 		documents = docs.doc_from_pdf_files(pdf_files, document_loader, splitter, splitter_kwargs)
 		self.documents.extend(documents) 
-		_ = self.build()
+		self.build()
 		self.built = True  
 	
 	@classmethod
 	def from_pdf(cls, pdf_files: Union[str, List[str]],
 		embeddings: str = 'openai-text-embedding-3-large',
-				store = "memory",
+					store_path: str = None,
 				document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 					parent_splitter: Literal['recursive', 'token'] = 'recursive', 
 						child_splitter: Literal['recursive', 'token'] = 'recursive',
@@ -216,11 +252,36 @@ class ParentDocument(Retriever):
 		
 		documents = docs.doc_from_pdf_files(pdf_files,
 			document_loader = document_loader, splitter = None)
-		return cls(documents, embeddings = embeddings, store = store, 
+		
+		return cls(documents, embeddings = embeddings, store_path = store_path, 
+					parent_splitter = parent_splitter, child_splitter = child_splitter, 
+						parent_chunk_size = parent_chunk_size, parent_chunk_overlap = parent_chunk_overlap, 
+							child_chunk_size = child_chunk_size, child_chunk_overlap = child_chunk_overlap)
+	@classmethod
+	def load_from_disk(cls, store_path: str, pdf_files: Optional[Union[str, List[str]]] = None, version_number: Literal['last'] | int = 'last', 
+						embeddings: str = 'openai-text-embedding-3-large', documnet_loader: Literal['pypdf', 'pymupdf'] = 'pypdf', 
+								parent_splitter: Literal['recursive', 'token'] = 'recursive', 
+									child_splitter: Literal['recursive', 'token'] = 'recursive',
+										parent_chunk_size: int = 2000, parent_chunk_overlap: int = 200,
+											child_chunk_size: int = 2000, child_chunk_overlap: int = 100) -> PD:
+		
+		if version_number == 'last':
+			store_version = sorted([file_name for file_name in listdir(store_path) if file_name.startswith("parent_document_retriever_")])[-1]
+		
+		store = InMemoryStore()
+		store_dict = save_load.load_from_pickle(path.join(store_path, store_version))
+		store.mset(store_dict.items())
+		documents = None 
+		if pdf_files is not None:
+			documents = docs.doc_from_pdf_files(pdf_files, documnet_loader, splitter = None)
+		
+		return cls(documents, embeddings = embeddings, store = store, store_path = store_path, 
 					parent_splitter = parent_splitter, child_splitter = child_splitter, 
 						parent_chunk_size = parent_chunk_size, parent_chunk_overlap = parent_chunk_overlap, 
 							child_chunk_size = child_chunk_size, child_chunk_overlap = child_chunk_overlap)
 
+
+		
 # ######################################### #
 # 	Retriever Factory						#
 # ######################################### #
