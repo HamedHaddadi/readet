@@ -4,6 +4,7 @@
 # level more abstraction than		#
 #  LangChain various retrievers		#
 # ################################# #
+import warnings 
 from typing import List, Union, Literal, Dict, Any, TypeVar, Optional  
 from os import path, makedirs, listdir 
 from abc import ABCMeta, abstractmethod 
@@ -296,11 +297,16 @@ class ParentDocument(Retriever):
 											child_chunk_size: int = 2000, child_chunk_overlap: int = 100) -> PD:
 		
 		if version_number == 'last':
-			store_version = sorted([file_name for file_name in listdir(store_path) if file_name.startswith("parent_document_retriever_")])[-1]
+			versions = [file_name for file_name in listdir(store_path) if file_name.startswith("parent_document_retriever_")]
+			if len(versions) > 0:
+				store_version = sorted(versions)[-1]
+				store = InMemoryStore()	
+				store_dict = save_load.load_from_pickle(path.join(store_path, store_version))
+				store.mset(store_dict.items())
+			else:
+				warnings.warn("requesting a parent document retriever from disk but no version was found")
+				store = None  
 		
-		store = InMemoryStore()
-		store_dict = save_load.load_from_pickle(path.join(store_path, store_version))
-		store.mset(store_dict.items())
 		documents = None 
 		if pdf_files is not None:
 			documents = docs.doc_from_pdf_files(pdf_files, document_loader, splitter = None)

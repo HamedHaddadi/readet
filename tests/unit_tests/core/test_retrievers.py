@@ -68,7 +68,6 @@ class TestParentDocument(TestCase):
 		assert path.exists(path.join(store_path, 'parent_document_retriever_1.pkl'))
 	
 	def test_get_retriever_for_parent_document_from_disk(self):
-		store_path = self.template_kw['store_path']
 		parent_retriever = get_retriever(self.pdf_files[0], retriever_type = 'parent-document', **self.template_kw)
 		new_kw = self.template_kw.copy()
 		new_kw['load_version_number'] = 'last'
