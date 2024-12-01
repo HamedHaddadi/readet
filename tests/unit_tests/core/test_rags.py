@@ -67,7 +67,6 @@ class TestAgenticAndSelfRAG(TestCase):
 		assert len(agentic_rag.retriever.runnable.docstore.store.values()) > 0
 		agentic_rag.build()
 		response = agentic_rag.run(query = 'What is the main idea of the document?', stream = False)
-		print('the response is: ', response)
 		assert isinstance(response, str)
 	
 	def test_agentic_rag_run_without_building(self):
@@ -104,13 +103,10 @@ class TestRAGEnsemble(TestCase):
 		assert isinstance(rag_ensemble.retriever, ParentDocument)
 		assert isinstance(rag_ensemble.retriever.runnable.docstore.store, dict)
 		assert len(rag_ensemble.retriever.runnable.docstore.store.values()) > 0
-		for name, rag in RAGEnsemble.RAG_TYPES.items():
-			assert isinstance(getattr(rag_ensemble, name), rag)
-	
+			
 	def test_rag_ensemble_run(self):
 		rag_ensemble = RAGEnsemble(self.pdf_files[0], retriever = 'parent-document', store_path = self.docstore_path, load_version_number = None)
-		rag_ensemble.build()
-		response = rag_ensemble.run(query = 'What is the relationship between viscosity and inertia??')
+		response = rag_ensemble('What is the relationship between viscosity and inertia??')
 		print(response)
 		assert isinstance(response, str)
 

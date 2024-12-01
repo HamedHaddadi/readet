@@ -464,6 +464,7 @@ class SelfRAG:
 	def build(self) -> None:
 		if not self.configured:
 			self.configure()
+			self.configured = True 
 		flow = StateGraph(GraphState)
 		flow.add_node("retrieve", self.retrieve)
 		flow.add_node("grade_answers", self.grader_answers)
@@ -549,6 +550,7 @@ class AgenticRAG:
 		
 		if isinstance(retriever, Retriever):
 			self.retriever = retriever
+			print('the retriever is: ', type(self.retriever))
 		elif isinstance(retriever, str) and retriever.lower() in AVAILABLE_RETRIEVERS:
 			self.retriever = get_retriever(documents = documents, retriever_type = retriever,
 				embeddings = embeddings, document_loader = document_loader, splitter = splitter,
@@ -667,6 +669,7 @@ class AgenticRAG:
 
 		if not self.configured:
 			self.configure()
+			self.configured = True 
 
 		flow = StateGraph(AgentState)
 		flow.add_node("agent", self._agent)
@@ -695,6 +698,7 @@ class AgenticRAG:
 	def _run(self, query: str) -> str:
 		inputs = {"messages": [(query),]}
 		output = self.runnable.invoke(inputs, stream_mode= "updates")
+		print('output', output)
 		if 'generate' in output[-1].keys():
 			return output[-1]["generate"]["messages"][-1]
 		else:
@@ -725,7 +729,7 @@ class RAGEnsemble(Callable):
 	"""
 	An ensemble of RAGs that are used to answer a question
 	"""
-	RAG_TYPES = {'plain_rag': PlainRAG, 'agentic_rag': AgenticRAG}
+	RAG_TYPES = {'plain_rag': PlainRAG, 'agentic_rag': AgenticRAG, 'self-rag': SelfRAG}
 	def __init__(self, documents: List[Document] | List[str] | str,
 				retriever: Literal['parent-document'] = 'parent-document',
 					store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
@@ -738,22 +742,14 @@ class RAGEnsemble(Callable):
 		self.retriever = get_retriever(documents = documents, retriever_type = retriever,
 								 embeddings = embeddings, document_loader = document_loader, splitter = splitter,
 								 store_path = store_path, load_version_number = load_version_number, **kwargs)
+		self.rags = {}
 		for rag_name, rag in self.RAG_TYPES.items():
-			setattr(self, rag_name, rag(documents = documents, retriever = retriever, chat_model = chat_model, 
-										embeddings = embeddings, document_loader = document_loader, splitter = splitter,
-										store_path = store_path, load_version_number = load_version_number, **kwargs))
-	
-	def build(self) -> None:
-		for rag in self.RAG_TYPES.keys():
-			rag_obj = getattr(self, rag)
-			rag_obj.build()
+			self.rags[rag_name] = rag(documents = None, retriever = self.retriever, chat_model = chat_model) 
 	
 	def run(self, query: str) -> str:
 		results = {}
-		for rag in self.RAG_TYPES.keys():
-			print(f"running {rag} rag")
-			rag_obj = getattr(self, rag)
-			results[rag] = rag_obj.run(query)
+		for rag_name in self.rags.keys():
+			results[rag_name] = self.rags[rag_name](query)
 		return '\n'.join([f"{rag}: {response}" for rag,response in results.items()])
 	
 	def __call__(self, query: str) -> str:
