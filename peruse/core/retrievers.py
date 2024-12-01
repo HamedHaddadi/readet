@@ -150,7 +150,6 @@ class ContextualCompression(Retriever):
 		self.built = False 
 		self.base_retriever.add_pdf(pdf_files, document_loader, splitter, chunk_size = chunk_size, chunk_overlap = chunk_overlap)
 		self.build()
-		self.built = True  
 	
 	@classmethod
 	def from_pdf(cls, pdf_files: Union[str, List[str]],

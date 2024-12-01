@@ -20,9 +20,11 @@ from langgraph.graph.message import add_messages
 from pprint import pprint 
 from pathlib import Path 
 from collections.abc import Callable
-from . retrievers import get_retriever 
+from . retrievers import get_retriever, Retriever 
 from .. utils import prompts, models, docs
 from .. utils.schemas import SCHEMAS 
+
+AVAILABLE_RETRIEVERS = ['parent-document']
 
 # ##### classes that are useful for all RAGS ##### #
 class RetrieverRunnable(BaseModel):
@@ -62,14 +64,15 @@ class PlainRAG(Callable):
 	Plain RAG class; 
 	__init__ parameters:
 		documents: documents to be used for creating the retriever
-		retriever: type of retriever to be used. Currently supporting Parent-Document and Contextual-Compression retrievers
-			to enable persistence of the retriever on disk
+		retriever: type of retriever to be used. Currently supporting parent-document retriever.
+			Note that retriever can also be a Retriever object
 		embeddings: embeddings model to be used
 		chat_model: chat model to be used
 		prompt: prompt to be used
 		document_loader: document loader to be used
 		splitter: splitter to be used 
-		load_version_number: version number of the retriever to be loaded from disk; if None a brand new retriever is created
+		load_version_number: version number of the retriever to be loaded from disk; if None a brand new retriever is created and persisted on disk
+		store_path: path to store the retriever on disk. if None, retriever is not persisted on disk
 	Attributes:
 		retriever: retriever object
 		llm: language model object
@@ -80,7 +83,7 @@ class PlainRAG(Callable):
 		run(self, query: str): invokes the RAG chain
 		__call__(self, query: str): invokes the RAG chain
 	"""
-	def __init__(self, documents: List[Document] | List[str] | str, retriever: Literal['parent-document'] = 'parent-document', 
+	def __init__(self, documents: List[Document] | List[str] | str, retriever: Union[str, Retriever] = 'parent-document', 
 				embeddings: str = 'openai-text-embedding-3-large', 
 					store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
 					chat_model: str = 'openai-gpt-4o-mini',
@@ -89,9 +92,15 @@ class PlainRAG(Callable):
 						splitter: Literal['recursive', 'token'] = 'recursive',
 							kwargs: Dict[str, Any] = {}):
 		
-		self.retriever = get_retriever(documents = documents, retriever_type = retriever,
+		if isinstance(retriever, Retriever):
+			self.retriever = retriever
+		elif isinstance(retriever, str) and retriever.lower() in AVAILABLE_RETRIEVERS:
+			self.retriever = get_retriever(documents = documents, retriever_type = retriever,
 				embeddings = embeddings, document_loader = document_loader, splitter = splitter,
 				 	store_path = store_path, load_version_number = load_version_number, **kwargs)
+		else:
+			raise ValueError(f"retriever must be a Retriever object or a string in ['parent-document']")
+		
 		self.llm = models.configure_chat_model(chat_model, temperature = 0) 
 		self.prompt = prompt 
 		self.runnable = None  
@@ -109,8 +118,19 @@ class PlainRAG(Callable):
 		else:
 			super(PlainRAG, self).__setattr__(name, value)
 	
+	def set_retriever(self, retriever: Retriever) -> None:
+		"""
+		sets the retriever after initialization
+		to generate multi-RAG chains
+		"""
+		if isinstance(retriever, Retriever):
+			self.retriever = retriever
+		else:
+			raise ValueError(f"setting retriever after initialization must be a Retriever object")
+	
 	def add_pdf(self, pdf_file: str) -> None:
 		self.retriever.add_pdf(pdf_file)
+		self.build()
 
 	def build(self) -> None:
 		self.runnable = ({'context': self.retriever.runnable, 'question': RunnablePassthrough()} | self.prompt | self.llm | StrOutputParser())
@@ -141,14 +161,16 @@ class RAGWithCitations(PlainRAG):
 			run(self, query: str): invokes the RAG chain
 			__call__(self, query: str): invokes the RAG chain
 	"""
-	def __init__(self, documents: List[Document] | List[str] | str, retriever: Literal['plain', 'contextual-compression', 'parent-document'] = 'contextual-compression', 
+	def __init__(self, documents: List[Document] | List[str] | str, retriever: Union[str, Retriever] = 'parent-document', 
 				embeddings: str = 'openai-text-embedding-3-large', 
+					store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
 					chat_model: str = 'openai-gpt-4o-mini',
 						prompt: Optional[str] = 'rag',
 					document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf', 
 						splitter: Literal['recursive', 'token'] = 'recursive',
 							kwargs: Dict[str, Any] = {}):
-		super(RAGWithCitations, self).__init__(documents, retriever, embeddings, chat_model, prompt, document_loader, splitter, kwargs)
+		super(RAGWithCitations, self).__init__(documents, retriever, embeddings, store_path,
+					load_version_number, chat_model, prompt, document_loader, splitter, kwargs)
 
 	@staticmethod
 	def _format_docs(docs: List[Document]) -> str:
@@ -169,7 +191,7 @@ class RAGWithCitations(PlainRAG):
 			response =  response["answer"]["answer"], response["answer"]["citations"][0]
 		return response 
 	
-	def __call__(self, query: str, parse = False) -> str:
+	def __call__(self, query: str, parse = True) -> str:
 		return self.run(query, parse)
 	
 
@@ -241,7 +263,8 @@ class SelfRAG:
 	"""
 	RECURSION_LIMIT = 40
 	def __init__(self, documents: List[Document] | List[str] | str,
-		retriever: Literal['plain', 'contextual-compression', 'parent-document'] = 'contextual-compression',
+		retriever: Union[str, Retriever] = 'parent-document',
+			store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
 			splitter: Literal['recursive', 'token'] = 'recursive',
 				document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 					 	 chat_model: str = 'openai-gpt-4o-mini', 
@@ -250,39 +273,31 @@ class SelfRAG:
 		self.runnable = None 
 
 		# note that self.retriever.runnable is the RunnableSequence method to call 
-		# retriver object is created here in case more pdf needs to be added in the RAG
-		self.retriever = get_retriever(documents = documents, retriever_type = retriever,
-				embeddings = embedding_model, document_loader = document_loader, splitter = splitter, **kwargs)
+		if isinstance(retriever, Retriever):
+			self.retriever = retriever
+		elif isinstance(retriever, str) and retriever.lower() in AVAILABLE_RETRIEVERS:
+			self.retriever = get_retriever(documents = documents, retriever_type = retriever,
+				embeddings = embedding_model, document_loader = document_loader, splitter = splitter,
+					store_path = store_path, load_version_number = load_version_number, **kwargs)
+		else:
+			raise ValueError(f"retriever must be a Retriever object or a string in ['parent-document']")
 		
 		self.retrieval_grader = None 
 		self.hallucination_grader = None 
 		self.answer_grader = None 
 		self.question_rewriter = None 
 		self.rag_chain = None 
-
 		self.chat_model = chat_model 
 
-		self._configured = False 
-		self._built = False 
+		self.configured = False 
+		self.built = False 
 
-	@property 
-	def configured(self):
-		return self._configured 
-	
-	@configured.setter 
-	def configured(self, status: bool):
-		if self._configured is False and status is True:
-			self._configured = True 
-
-	@property 
-	def built(self):
-		return self._built 
-
-	@built.setter
-	def built(self, status: bool):
-		if self._built is False and status is True:
-			self._built = True  
-	
+	def set_retriever(self, retriever: Retriever) -> None:
+		if isinstance(retriever, Retriever):
+			self.retriever = retriever
+		else:
+			raise ValueError(f"setting retriever after initialization must be a Retriever object")
+		
 	def _configure_grader(self) -> None:
 		llm = models.configure_chat_model(self.chat_model, temperature = 0)
 		struct_llm_grader = llm.with_structured_output(GradeRetrieval)
@@ -444,13 +459,11 @@ class SelfRAG:
 		self._configure_hallucination_grader()
 		self._configure_answer_grader() 
 		self._configure_question_rewriter() 
-		self._configured = True 
+		self.configured = True 
 	
 	def build(self) -> None:
-
-		if not self._configured:
+		if not self.configured:
 			self.configure()
-
 		flow = StateGraph(GraphState)
 		flow.add_node("retrieve", self.retrieve)
 		flow.add_node("grade_answers", self.grader_answers)
@@ -470,7 +483,7 @@ class SelfRAG:
 			{"not supported": "generate", "useful": END, 
 				"not useful": "transform_query",},)
 		self.runnable = flow.compile()
-		self._built = True 
+		self.built = True 
 	
 	# other helper methods 
 	def _run(self, question: str) -> str:
@@ -487,13 +500,17 @@ class SelfRAG:
 		pprint(value["generation"])		
 	
 	def run(self, question: str, stream: bool = False, stream_mode: Literal['updates', 'values'] = 'updates') -> Union[str, None]:
+		if not self.built:
+			self.build()
 		if stream:
 			self._run_stream(question, stream_mode = stream_mode)
 		else:
 			return self._run(question)
 	
 	def add_pdf(self, pdf_file: str) -> None:
+		self.configured = False 
 		self.retriever.add_pdf(pdf_file)
+		self.build()
 
 	def __call__(self, question: str, stream: bool = False, stream_mode: Literal['updates', 'values'] = 'updates') -> Union[str, None]:
 		return self.run(question, stream = stream, stream_mode = stream_mode)
@@ -521,42 +538,40 @@ class AgenticRAG:
 	agentic RAG that runs a RAG on a single pdf file. 
 	"""
 	def __init__(self, documents: List[Document] | List[str] | str,
-			  	retriever: Literal['plain', 'contextual-compression', 'parent-document'] = 'contextual-compression',
+			  	retriever: Union[str, Retriever] = 'parent-document',
+				  store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
 				  splitter: Literal['recursive', 'token'] = 'recursive',
 						document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 								chat_model: str = "openai-gpt-4o-mini", 
 									embedding_model: str = "openai-text-embedding-3-large", 
 										kwargs: Dict[str, Any] = {}):
 		self.runnable = None 
-		self.retriever = get_retriever(documents = documents, retriever_type = retriever,
-				embeddings = embedding_model, document_loader = document_loader, splitter = splitter, **kwargs)
+		if isinstance(retriever, Retriever):
+			self.retriever = retriever
+		elif isinstance(retriever, str) and retriever.lower() in AVAILABLE_RETRIEVERS:
+			self.retriever = get_retriever(documents = documents, retriever_type = retriever,
+				embeddings = embedding_model, document_loader = document_loader, splitter = splitter,
+					store_path = store_path, load_version_number = load_version_number, **kwargs)
+		else:
+			raise ValueError(f"retriever must be a Retriever object or a string in ['parent-document']")
+		
 		self.retriever_tool = RetrieverTool(retriever = RetrieverRunnable(runnable = self.retriever.runnable))
 
 		self.relevance_chain = None 
 		self.generate_chain = None
+		self.chat_model = chat_model 
 
 		# runnable is a graph in this case
-		self._configured = False
-		self._built = False  
-		self.chat_model = chat_model 
+		self.configured = False
+		self.built = False  
 		
-	@property 
-	def configured(self):
-		return self._configured 
 	
-	@configured.setter
-	def configured(self, status: bool):
-		if self._configured is False and status is True:
-			self._configured = True 
-	
-	@property
-	def built(self):
-		return self._built 
-	
-	@built.setter
-	def built(self, status: bool):
-		if self._built is False and status is True:
-			self._built = True 
+	def set_retriever(self, retriever: Retriever) -> None:
+		if isinstance(retriever, Retriever):
+			self.retriever = retriever
+			self.retriever_tool = RetrieverTool(retriever = RetrieverRunnable(runnable = self.retriever.runnable))
+		else:
+			raise ValueError(f"setting retriever after initialization must be a Retriever object")
 	
 	def _configure_relevance_check_chain(self) -> None:
 		llm = models.configure_chat_model(self.chat_model, temperature = 0)
@@ -645,11 +660,11 @@ class AgenticRAG:
 	def configure(self) -> None:
 		self._configure_relevance_check_chain()
 		self._configure_generate_chain()
-		self._configured = True 
+		self.configured = True 
 
 	def build(self) -> None:
 
-		if not self._configured:
+		if not self.configured:
 			self.configure()
 
 		flow = StateGraph(AgentState)
@@ -665,7 +680,7 @@ class AgenticRAG:
 		flow.add_edge("generate", END)
 		flow.add_edge("rewrite", "agent")
 		self.runnable = flow.compile()
-		self._built = True 
+		self.built = True 
 	
 	# run methods 
 	def _run_stream(self, query: str):
@@ -679,15 +694,20 @@ class AgenticRAG:
 	def _run(self, query: str) -> str:
 		inputs = {"messages": [(query),]}
 		output = self.runnable.invoke(inputs, stream_mode= "updates")
-		return output["messages"][-1].content 
+		return output[-1]["generate"]["messages"][-1]
 	
 	def run(self, query: str, stream: bool = False) -> Union[str, None]:
-		if not self._built:
+		if not self.built:
 			self.build()
 		if not stream:
 			return self._run(query)
 		else:
 			self._run_stream(query)
+	
+	def add_pdf(self, pdf_file: str) -> None:
+		self.configured = False 
+		self.retriever.add_pdf(pdf_file)
+		self.build()
 	
 	# to support calling the class as a function
 	def __call__(self, query: str, stream: bool = False) -> Union[str, None]:
