@@ -83,7 +83,7 @@ class PlainRAG(Callable):
 		run(self, query: str): invokes the RAG chain
 		__call__(self, query: str): invokes the RAG chain
 	"""
-	def __init__(self, documents: List[Document] | List[str] | str, retriever: Union[str, Retriever] = 'parent-document', 
+	def __init__(self, documents: Optional[Union[List[Document], List[str], str]] = None, retriever: Union[str, Retriever] = 'parent-document', 
 				embeddings: str = 'openai-text-embedding-3-large', 
 					store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
 					chat_model: str = 'openai-gpt-4o-mini',
@@ -161,7 +161,7 @@ class RAGWithCitations(PlainRAG):
 			run(self, query: str): invokes the RAG chain
 			__call__(self, query: str): invokes the RAG chain
 	"""
-	def __init__(self, documents: List[Document] | List[str] | str, retriever: Union[str, Retriever] = 'parent-document', 
+	def __init__(self, documents: Optional[Union[List[Document], List[str], str]] = None, retriever: Union[str, Retriever] = 'parent-document', 
 				embeddings: str = 'openai-text-embedding-3-large', 
 					store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
 					chat_model: str = 'openai-gpt-4o-mini',
@@ -262,13 +262,13 @@ class SelfRAG:
 		run(self): whicb runs the graph
 	"""
 	RECURSION_LIMIT = 40
-	def __init__(self, documents: List[Document] | List[str] | str,
+	def __init__(self, documents: Optional[Union[List[Document],List[str],str]] = None,
 		retriever: Union[str, Retriever] = 'parent-document',
 			store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
 			splitter: Literal['recursive', 'token'] = 'recursive',
 				document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 					 	 chat_model: str = 'openai-gpt-4o-mini', 
-						  	embedding_model: str = 'openai-text-embedding-3-large', 
+						  	embeddings: str = 'openai-text-embedding-3-large', 
 									kwargs: Dict[str, Any] = {}):
 		self.runnable = None 
 
@@ -277,7 +277,7 @@ class SelfRAG:
 			self.retriever = retriever
 		elif isinstance(retriever, str) and retriever.lower() in AVAILABLE_RETRIEVERS:
 			self.retriever = get_retriever(documents = documents, retriever_type = retriever,
-				embeddings = embedding_model, document_loader = document_loader, splitter = splitter,
+				embeddings = embeddings, document_loader = document_loader, splitter = splitter,
 					store_path = store_path, load_version_number = load_version_number, **kwargs)
 		else:
 			raise ValueError(f"retriever must be a Retriever object or a string in ['parent-document']")
@@ -537,20 +537,21 @@ class AgenticRAG:
 	"""
 	agentic RAG that runs a RAG on a single pdf file. 
 	"""
-	def __init__(self, documents: List[Document] | List[str] | str,
+	def __init__(self, documents: Optional[Union[List[Document],List[str],str]] = None,
 			  	retriever: Union[str, Retriever] = 'parent-document',
 				  store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
 				  splitter: Literal['recursive', 'token'] = 'recursive',
 						document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 								chat_model: str = "openai-gpt-4o-mini", 
-									embedding_model: str = "openai-text-embedding-3-large", 
+									embeddings: str = "openai-text-embedding-3-large", 
 										kwargs: Dict[str, Any] = {}):
 		self.runnable = None 
+		
 		if isinstance(retriever, Retriever):
 			self.retriever = retriever
 		elif isinstance(retriever, str) and retriever.lower() in AVAILABLE_RETRIEVERS:
 			self.retriever = get_retriever(documents = documents, retriever_type = retriever,
-				embeddings = embedding_model, document_loader = document_loader, splitter = splitter,
+				embeddings = embeddings, document_loader = document_loader, splitter = splitter,
 					store_path = store_path, load_version_number = load_version_number, **kwargs)
 		else:
 			raise ValueError(f"retriever must be a Retriever object or a string in ['parent-document']")
@@ -694,7 +695,10 @@ class AgenticRAG:
 	def _run(self, query: str) -> str:
 		inputs = {"messages": [(query),]}
 		output = self.runnable.invoke(inputs, stream_mode= "updates")
-		return output[-1]["generate"]["messages"][-1]
+		if 'generate' in output[-1].keys():
+			return output[-1]["generate"]["messages"][-1]
+		else:
+			return "no response to this query" 
 	
 	def run(self, query: str, stream: bool = False) -> Union[str, None]:
 		if not self.built:
@@ -712,6 +716,58 @@ class AgenticRAG:
 	# to support calling the class as a function
 	def __call__(self, query: str, stream: bool = False) -> Union[str, None]:
 		return self.run(query, stream = stream)
+
+
+# ########################################## #
+# Rag ensembles						   		 #
+# ########################################## #
+class RAGEnsemble(Callable):
+	"""
+	An ensemble of RAGs that are used to answer a question
+	"""
+	RAG_TYPES = {'plain_rag': PlainRAG, 'agentic_rag': AgenticRAG}
+	def __init__(self, documents: List[Document] | List[str] | str,
+				retriever: Literal['parent-document'] = 'parent-document',
+					store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
+					splitter: Literal['recursive', 'token'] = 'recursive',
+						document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
+								chat_model: str = "openai-gpt-4o-mini", 
+									embeddings: str = "openai-text-embedding-3-large", 
+										kwargs: Dict[str, Any] = {}):
+		
+		self.retriever = get_retriever(documents = documents, retriever_type = retriever,
+								 embeddings = embeddings, document_loader = document_loader, splitter = splitter,
+								 store_path = store_path, load_version_number = load_version_number, **kwargs)
+		for rag_name, rag in self.RAG_TYPES.items():
+			setattr(self, rag_name, rag(documents = documents, retriever = retriever, chat_model = chat_model, 
+										embeddings = embeddings, document_loader = document_loader, splitter = splitter,
+										store_path = store_path, load_version_number = load_version_number, **kwargs))
+	
+	def build(self) -> None:
+		for rag in self.RAG_TYPES.keys():
+			rag_obj = getattr(self, rag)
+			rag_obj.build()
+	
+	def run(self, query: str) -> str:
+		results = {}
+		for rag in self.RAG_TYPES.keys():
+			print(f"running {rag} rag")
+			rag_obj = getattr(self, rag)
+			results[rag] = rag_obj.run(query)
+		return '\n'.join([f"{rag}: {response}" for rag,response in results.items()])
+	
+	def __call__(self, query: str) -> str:
+		return self.run(query)
+
+
+		
+		
+		
+
+
+
+
+
 
 # ##################################### #
 RAGS = {'self-single-pdf': SelfRAG, 
