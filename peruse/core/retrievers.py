@@ -114,13 +114,20 @@ class ContextualCompression(Retriever):
 	"""
 	def __init__(self, documents: List[Document],  
 				embeddings: str = 'openai-text-embedding-3-large', 
-					search_type: Literal["mmr", "similarity"] = "similarity",
-					k: int = 5, lambda_mult: float = 0.5, fetch_k: int = 20):
+					store: Optional[BaseStore] = None, store_path: Optional[str] = None,
+					parent_splitter: Literal['recursive', 'token'] = 'token', 
+					child_splitter: Literal['recursive', 'token'] = 'recursive', 
+					parent_chunk_size: int = 2000, parent_chunk_overlap: int = 200,
+					child_chunk_size: int = 2000, child_chunk_overlap: int = 100):
 		super().__init__()
 		self.documents = documents
 		self.llm = OpenAI(temperature = 0)
-		self.base_retriever = PlainRetriever(documents, embeddings)
-		self.base_retriever.build(search_type = search_type, k = k, lambda_mult = lambda_mult, fetch_k = fetch_k)
+		self.base_retriever = ParentDocument(documents = documents, embeddings = embeddings, 
+				store = store, store_path = store_path, parent_splitter = parent_splitter, 
+					child_splitter = child_splitter, parent_chunk_size = parent_chunk_size, 
+						parent_chunk_overlap = parent_chunk_overlap, child_chunk_size = child_chunk_size, 
+							child_chunk_overlap = child_chunk_overlap)
+		self.base_retriever.build()
 		self.runnable = None 
 	
 	def build(self):
@@ -133,30 +140,53 @@ class ContextualCompression(Retriever):
 		self.built = True 
 	
 	def num_docs(self) -> int:
-		pass 
+		return len(self.base_retriever.runnable.docstore.store.keys()) 
 	
 	def add_pdf(self, pdf_files: List[str] | str, 
 			 	document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 				splitter: Literal['recursive', 'token'] = 'recursive',
-				splitter_kwargs: Dict[str, Any] = {}) -> None:
+				chunk_size: int = 2000, chunk_overlap: int = 200) -> None:
 		self.built = False 
-		documents = docs.doc_from_pdf_files(pdf_files, document_loader, splitter, splitter_kwargs)
-		self.base_retriever.vector_store.add_documents(documents)
+		self.base_retriever.add_pdf(pdf_files, document_loader, splitter, chunk_size = chunk_size, chunk_overlap = chunk_overlap)
 		self.build()
 		self.built = True  
 	
 	@classmethod
 	def from_pdf(cls, pdf_files: Union[str, List[str]],
+			  store: Optional[BaseStore] = None, store_path: Optional[str] = None,
 			   splitter: Literal['recursive', 'token'] = 'recursive', 
 			   	document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf' ,
 				embeddings: str = 'openai-text-embedding-3-large',
-				search_type: Literal["mmr", "similarity"] = "similarity",
-				k: int = 5, lambda_mult: float = 0.5, fetch_k: int = 20,
-			   	splitter_kwargs: Dict[str, Any] = {}) -> CC:
+				parent_splitter: Literal['recursive', 'token'] = 'token', 
+				child_splitter: Literal['recursive', 'token'] = 'recursive',
+				parent_chunk_size: int = 2000, parent_chunk_overlap: int = 200,
+				child_chunk_size: int = 2000, child_chunk_overlap: int = 100,
+			   	chunk_size: int = 2000, chunk_overlap: int = 200) -> CC:
 		
-		documents = docs.doc_from_pdf_files(pdf_files, document_loader, splitter, splitter_kwargs)
-		return cls(documents, embeddings = embeddings, search_type = search_type,
-					k = k, lambda_mult = lambda_mult, fetch_k = fetch_k)
+		documents = docs.doc_from_pdf_files(pdf_files, document_loader, splitter, chunk_size = chunk_size, chunk_overlap = chunk_overlap)
+		return cls(documents, embeddings = embeddings, store = store, store_path = store_path, 
+					parent_splitter = parent_splitter, child_splitter = child_splitter, 
+						parent_chunk_size = parent_chunk_size, parent_chunk_overlap = parent_chunk_overlap, 
+							child_chunk_size = child_chunk_size, child_chunk_overlap = child_chunk_overlap)
+	
+	@classmethod
+	def load_from_disk(cls, store_path: str, pdf_files: Optional[Union[str, List[str]]] = None, version_number: Literal['last'] | int = 'last', 
+						embeddings: str = 'openai-text-embedding-3-large', documnet_loader: Literal['pypdf', 'pymupdf'] = 'pypdf', 
+							parent_splitter: Literal['recursive', 'token'] = 'recursive', child_splitter: Literal['recursive', 'token'] = 'recursive',
+								parent_chunk_size: int = 2000, parent_chunk_overlap: int = 200, child_chunk_size: int = 2000, child_chunk_overlap: int = 100) -> CC:
+		if version_number == 'last':
+			store_version = sorted([file_name for file_name in listdir(store_path) if file_name.startswith("parent_document_retriever_")])[-1]
+		
+		store = InMemoryStore()
+		store_dict = save_load.load_from_pickle(path.join(store_path, store_version))
+		store.mset(store_dict.items())
+		documents = None 
+		if pdf_files is not None:
+			documents = docs.doc_from_pdf_files(pdf_files, documnet_loader, splitter = None)
+		
+		return cls(documents, embeddings = embeddings, store = store, store_path = store_path, parent_splitter = parent_splitter, child_splitter = child_splitter, 
+					parent_chunk_size = parent_chunk_size, parent_chunk_overlap = parent_chunk_overlap, 
+						child_chunk_size = child_chunk_size, child_chunk_overlap = child_chunk_overlap)
 
 # ######################################### #
 # 	Parent Document Retriever				#
@@ -233,9 +263,9 @@ class ParentDocument(Retriever):
 	def add_pdf(self, pdf_files: List[str] | str, 
 			 	document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 				splitter: Literal['recursive', 'token'] = 'recursive',
-				splitter_kwargs: Dict[str, Any] = {}) -> None:
+				chunk_size: int = 2000, chunk_overlap: int = 200) -> None:
 		self.built = False 
-		documents = docs.doc_from_pdf_files(pdf_files, document_loader, splitter, splitter_kwargs)
+		documents = docs.doc_from_pdf_files(pdf_files, document_loader, splitter, chunk_size = chunk_size, chunk_overlap = chunk_overlap)
 		self.documents.extend(documents) 
 		self.build()
 		self.built = True  
@@ -259,7 +289,7 @@ class ParentDocument(Retriever):
 							child_chunk_size = child_chunk_size, child_chunk_overlap = child_chunk_overlap)
 	@classmethod
 	def load_from_disk(cls, store_path: str, pdf_files: Optional[Union[str, List[str]]] = None, version_number: Literal['last'] | int = 'last', 
-						embeddings: str = 'openai-text-embedding-3-large', documnet_loader: Literal['pypdf', 'pymupdf'] = 'pypdf', 
+						embeddings: str = 'openai-text-embedding-3-large', document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf', 
 								parent_splitter: Literal['recursive', 'token'] = 'recursive', 
 									child_splitter: Literal['recursive', 'token'] = 'recursive',
 										parent_chunk_size: int = 2000, parent_chunk_overlap: int = 200,
@@ -273,13 +303,12 @@ class ParentDocument(Retriever):
 		store.mset(store_dict.items())
 		documents = None 
 		if pdf_files is not None:
-			documents = docs.doc_from_pdf_files(pdf_files, documnet_loader, splitter = None)
+			documents = docs.doc_from_pdf_files(pdf_files, document_loader, splitter = None)
 		
 		return cls(documents, embeddings = embeddings, store = store, store_path = store_path, 
 					parent_splitter = parent_splitter, child_splitter = child_splitter, 
 						parent_chunk_size = parent_chunk_size, parent_chunk_overlap = parent_chunk_overlap, 
 							child_chunk_size = child_chunk_size, child_chunk_overlap = child_chunk_overlap)
-
 
 		
 # ######################################### #
@@ -304,40 +333,35 @@ def get_retriever(documents: List[Document] | List[str] | str,
 											fetch_k = kwargs.get('fetch_k', 20))
 		return retriever 
 	
-	elif retriever_type == 'contextual-compression':
+	elif retriever_type == 'parent-document':
 		if not all(isinstance(doc, Document) for doc in documents) and (all(isinstance(doc, str) for doc in documents) or isinstance(documents, str)):
-			retriever = ContextualCompression.from_pdf(documents, splitter = kwargs.get('splitter', 'recursive'),
-				embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'),
-					document_loader = kwargs.get('document_loader', 'pypdf'),
-						search_type = kwargs.get('search_type', 'similarity'),
-							k = kwargs.get('k', 5), lambda_mult = kwargs.get('lambda_mult', 0.5), fetch_k = kwargs.get('fetch_k', 20))																										
+			load_version_number = kwargs.get('load_version_number', None)
+			if isinstance(load_version_number, (str, int)):
+				retriever = ParentDocument.load_from_disk(kwargs.get('store_path'), pdf_files = documents,
+				version_number = load_version_number, embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'),
+					document_loader = kwargs.get('document_loader', 'pypdf'), parent_splitter = kwargs.get('parent_splitter', 'token'),
+						child_splitter = kwargs.get('child_splitter', 'recursive'), parent_chunk_size = kwargs.get('parent_chunk_size', 2000), 
+							child_chunk_size = kwargs.get('child_chunk_size', 2000), parent_chunk_overlap = kwargs.get('parent_chunk_overlap', 200),
+								child_chunk_overlap = kwargs.get('child_chunk_overlap', 100))
+			else:
+				retriever = ParentDocument.from_pdf(documents, store_path = kwargs.get('store_path'),
+					embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'),
+					document_loader = kwargs.get('document_loader', 'pypdf'), parent_splitter = kwargs.get('parent_splitter', 'token'),
+					child_splitter = kwargs.get('child_splitter', 'recursive'), parent_chunk_size = kwargs.get('parent_chunk_size', 2000), 
+						child_chunk_size = kwargs.get('child_chunk_size', 2000), parent_chunk_overlap = kwargs.get('parent_chunk_overlap', 200),
+								child_chunk_overlap = kwargs.get('child_chunk_overlap', 100))																										
 		else:
 			retriever = ContextualCompression(documents, embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'), 
-				search_type = kwargs.get('search_type', 'similarity'), k = kwargs.get('k', 5), lambda_mult = kwargs.get('lambda_mult', 0.5),
-									fetch_k = kwargs.get('fetch_k', 20))
+				store = kwargs.get('store', None), store_path = kwargs.get('store_path', None),
+				parent_splitter = kwargs.get('parent_splitter', 'token'), child_splitter = kwargs.get('child_splitter', 'recursive'),
+					parent_chunk_size = kwargs.get('parent_chunk_size', 2000), child_chunk_size = kwargs.get('child_chunk_size', 2000),
+						parent_chunk_overlap = kwargs.get('parent_chunk_overlap', 200), child_chunk_overlap = kwargs.get('child_chunk_overlap', 100))
 		
 		retriever.build()
 		return retriever 
 	
-	elif retriever_type == 'parent-document':
-		if not all(isinstance(doc, Document) for doc in documents) and (all(isinstance(doc, str) for doc in documents) or isinstance(documents, str)):
-			retriever = ParentDocument.from_pdf(documents,
-				store = kwargs.get('store', 'memory'),
-				embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'),
-					document_loader = kwargs.get('document_loader', 'pypdf'),
-							parent_splitter = kwargs.get('parent_splitter', 'token'),
-								child_splitter = kwargs.get('child_splitter', 'recursive'), 
-									parent_chunk_size = kwargs.get('parent_chunk_size', 2000), 
-										parent_chunk_overlap = kwargs.get('parent_chunk_overlap', 200),
-											child_chunk_size = kwargs.get('child_chunk_size', 2000), 
-												child_chunk_overlap = kwargs.get('child_chunk_overlap', 100))
-		else:
-			retriever = ParentDocument(documents, embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'), store = kwargs.get('store', 'memory'),
-				parent_splitter = kwargs.get('parent_splitter', 'token'), child_splitter = kwargs.get('child_splitter', 'recursive'), 
-					parent_chunk_size = kwargs.get('parent_chunk_size', 2000), parent_chunk_overlap = kwargs.get('parent_chunk_overlap', 200),
-						child_chunk_size = kwargs.get('child_chunk_size', 2000), child_chunk_overlap = kwargs.get('child_chunk_overlap', 100))
-		retriever.build()
-		return retriever 
+	elif retriever_type == 'contextual-compression':
+		raise NotImplementedError("Contextual Compression Retriever is not yet implemented")
 	
 	else:
 		raise ValueError(f"Invalid retriever type: {retriever_type}")

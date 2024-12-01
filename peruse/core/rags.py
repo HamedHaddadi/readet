@@ -62,12 +62,14 @@ class PlainRAG(Callable):
 	Plain RAG class; 
 	__init__ parameters:
 		documents: documents to be used for creating the retriever
-		retriever: type of retriever to be used
+		retriever: type of retriever to be used. Currently supporting Parent-Document and Contextual-Compression retrievers
+			to enable persistence of the retriever on disk
 		embeddings: embeddings model to be used
 		chat_model: chat model to be used
 		prompt: prompt to be used
 		document_loader: document loader to be used
 		splitter: splitter to be used 
+		load_version_number: version number of the retriever to be loaded from disk; if None a brand new retriever is created
 	Attributes:
 		retriever: retriever object
 		llm: language model object
@@ -78,15 +80,18 @@ class PlainRAG(Callable):
 		run(self, query: str): invokes the RAG chain
 		__call__(self, query: str): invokes the RAG chain
 	"""
-	def __init__(self, documents: List[Document] | List[str] | str, retriever: Literal['plain', 'contextual-compression', 'parent-document'] = 'contextual-compression', 
+	def __init__(self, documents: List[Document] | List[str] | str, retriever: Literal['parent-document'] = 'parent-document', 
 				embeddings: str = 'openai-text-embedding-3-large', 
+					store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
 					chat_model: str = 'openai-gpt-4o-mini',
 						prompt: Optional[str] = 'rag',
 					document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf', 
 						splitter: Literal['recursive', 'token'] = 'recursive',
 							kwargs: Dict[str, Any] = {}):
+		
 		self.retriever = get_retriever(documents = documents, retriever_type = retriever,
-				embeddings = embeddings, document_loader = document_loader, splitter = splitter, **kwargs)
+				embeddings = embeddings, document_loader = document_loader, splitter = splitter,
+				 	store_path = store_path, load_version_number = load_version_number, **kwargs)
 		self.llm = models.configure_chat_model(chat_model, temperature = 0) 
 		self.prompt = prompt 
 		self.runnable = None  

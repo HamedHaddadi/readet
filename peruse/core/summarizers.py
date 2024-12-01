@@ -47,7 +47,7 @@ def refine_pdf_summary(pdf_file: str, chat_model: str = 'openai-gpt-4o-mini',
 	"""
 	uses predefined load_summarize_chain of LangChain to summarize a pdf file
 	"""
-	documents = docs.load_and_split_pdf(pdf_file)
+	documents = docs.doc_from_pdf_files(pdf_file)
 	if documents is not None:
 		llm = models.configure_chat_model(chat_model, temperature = temperature)
 		chain = load_summarize_chain(llm, chain_type = 'refine')
