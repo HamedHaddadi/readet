@@ -10,8 +10,6 @@ from os import path, makedirs, listdir
 from abc import ABCMeta, abstractmethod 
 from langchain_core.documents import Document
 from langchain_core.stores import BaseStore
-from langchain_core.vectorstores import VectorStoreRetriever
-from langchain_community.document_loaders import PyPDFLoader, pdf
 from langchain_text_splitters import RecursiveCharacterTextSplitter, TokenTextSplitter
 from langchain.storage import InMemoryStore 
 from langchain_chroma import Chroma
@@ -102,7 +100,6 @@ class PlainRetriever(Retriever):
 				splitter_kwargs: Dict[str, Any] = {}) -> PR:
 		documents = docs.doc_from_pdf_files(pdf_files, document_loader, splitter, splitter_kwargs)
 		return cls(documents, embeddings)
-
 
 # ######################################### #
 # ContextualCompressionRetriever			#

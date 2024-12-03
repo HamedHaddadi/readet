@@ -3,13 +3,11 @@
 # ########################################### #
 import os
 import re 
-import sys 
 import plotly 
 from time import time
 import pandas as pd  
 from pathlib import Path 
 from os import path, makedirs, listdir, PathLike 
-from functools import wraps 
 import plotly.express as px 
 from tqdm import tqdm 
 from arxiv import Search as ArSearch 
@@ -17,10 +15,8 @@ from arxiv import Client as ArClient
 from serpapi import Client 
 from semanticscholar import SemanticScholar 
 from pydantic import BaseModel, Field, root_validator, model_validator
-from langchain_core.tools import BaseTool, tool  
-from langchain_core.retrievers import BaseRetriever 
-from langchain_core.prompts import BasePromptTemplate, PromptTemplate, format_document  
-from langchain_community.document_loaders import pdf 
+from langchain_core.tools import BaseTool 
+from langchain_core.prompts import PromptTemplate  
 from typing import Literal, Optional, Any, Dict, Union, List, Sequence
 from urllib.request import urlretrieve  
 from . summarizers import SUMMARIZERS
@@ -428,8 +424,6 @@ class PDFSummaryTool(BaseTool):
 		return summary 
 
 	def _run(self, pdf_file: str) -> str:
-		#print(f"the pdf file I am summarizing is {pdf_file}")
-		#print("the path to the files is ", self.path_to_files)
 		if "all" in pdf_file.lower() and not pdf_file.endswith('.pdf'):
 			return self._summarize_all()
 		else:

@@ -32,15 +32,14 @@ class PlainSummarizer(Callable):
 
 	def __call__(self, pdf_file: str | List[str], document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 					splitter: Literal['recursive', 'token'] | None = 'recursive', 
-						splitter_kwargs: Dict[str, Any] = {}) -> str:
-		document = docs.doc_from_pdf_files(pdf_file, document_loader = document_loader, 
-									 	splitter = splitter, splitter_kwargs = splitter_kwargs)
+						chunk_size: int = 2000, chunk_overlap: int = 200) -> str:
+		document = docs.doc_from_pdf_files(pdf_file, document_loader = document_loader, splitter = splitter, 
+									 	chunk_size = chunk_size, chunk_overlap = chunk_overlap)
 		if document is not None:
 			return self.chain.invoke(document).content 
 		else:
 			return ""
 	
-
 # refine summarizer
 def refine_pdf_summary(pdf_file: str, chat_model: str = 'openai-gpt-4o-mini', 
 				temperature = 0) -> str:
@@ -73,7 +72,7 @@ class GraphState(TypedDict):
 class SummaryState(TypedDict):
 	content: str
 
-class MapReduceSummary(Callable):
+class MapReduceSummarizer(Callable):
 	"""
 	uses a MapReduce approach to generate a summary of the input text
 	can be instantiated from pdf files or other texts
@@ -133,17 +132,17 @@ class MapReduceSummary(Callable):
 	
 	def __call__(self, pdf_file: str | List[str], document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 					splitter: Literal['recursive', 'token'] | None = 'recursive', 
-						splitter_kwargs: Dict[str, Any] = {}) -> str:
+						chunk_size: int = 2000, chunk_overlap: int = 200) -> str:
+		"""
+		no streaming is supported for this summarizer
+		"""
 		documents = docs.doc_from_pdf_files(pdf_file, document_loader = document_loader, 
-									 	splitter = splitter, splitter_kwargs = splitter_kwargs)
-		for step in self.runnable.stream({"contents": [doc.page_content for doc in documents]}, 
-						stream_mode = "updates"):
-			pass 
-		return step["generate_final_summary"]["final_summary"]
+									 	splitter = splitter, chunk_size = chunk_size, chunk_overlap = chunk_overlap)
+		contents = [doc.page_content for doc in documents]
+		return self.runnable.invoke({"contents": contents})["final_summary"]
 			
 
-
 SUMMARIZERS = {"plain": PlainSummarizer, 
-					"map-reduce": MapReduceSummary}
+					"map-reduce": MapReduceSummarizer}
 
 
