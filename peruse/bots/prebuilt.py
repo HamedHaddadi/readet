@@ -3,8 +3,6 @@
 # Prebuilt functions and classes for agentic systems #
 # ################################################## #
 from os import PathLike 
-import sqlite3 
-import threading 
 from pydantic import BaseModel, Field   
 from typing import Union, Sequence, Literal, Annotated, List, Optional
 from functools import partial 
@@ -280,6 +278,26 @@ class ResearchAssistant:
 
 	def run(self) -> None:
 		pass
+
+# ################################################## #
+# 	Download agent using ReAct class 				#
+# ################################################## #
+class Download(Callable):
+	"""
+	Download agent using ReAct class. searches and downloads papers from arxiv and scholar
+	"""
+	PROMPT = """You are a specialized assistant for searching technical papers on google
+				scholar and arxiv and downloading them. use the tools provided to you to complete the task."""
+	def __init__(self, save_path: str, max_results: int = 100, 
+			  		chat_model: str = 'openai-gpt-4o-mini', 
+						search_in: List[Literal['google_scholar', 'arxiv', 'google_patent']] = ['arxiv', 'google_scholar']) -> None:
+		tools = [tool_name + '_search' for tool_name in search_in] + ['pdf_download']
+		self.agent = ReAct(tools = tools, chat_model = chat_model, added_prompt = self.PROMPT,  
+								max_results = max_results, save_path = save_path)
+	def __call__(self, query: str) -> None:
+		self.agent(query)
+		
+		
 
 
 

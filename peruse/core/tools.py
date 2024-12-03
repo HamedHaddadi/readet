@@ -41,8 +41,9 @@ class GoogleScholarSearch(BaseModel):
 		scholar_search_engine: serpapi GoogleScholarSearch class
 	"""
 	top_k_results: int 
-	sepr_api_key: Optional[str] = None 
+	serp_api_key: Optional[str] = None 
 	scholar_search_engine: Any 
+	save_path: str = Field(description = "path to the storing directory of the analytics file")
 
 	@model_validator(mode = 'before')
 	def validate_environment_and_key(cls, values: Dict) -> Dict:
@@ -51,6 +52,9 @@ class GoogleScholarSearch(BaseModel):
 			serp_api_key = os.environ["SERP_API_KEY"]
 		client = Client(api_key = serp_api_key) 
 		values["scholar_search_engine"] = client 
+		save_path = values.get('save_path')
+		if save_path is not None and not path.exists(save_path):
+			makedirs(save_path)
 		return values 
 	
 	@staticmethod 
@@ -91,17 +95,18 @@ class GoogleScholarSearch(BaseModel):
 			
 		if not all_results:
 			return "No good Google Scholar Result was found" 
-		
-		print('the length of all results are ', len(all_results))
-		
+				
 		docs = ["******************* \n"
             f"Title: {result.get('Title','')}\n"
             f"Authors: {result.get('Authors')}\n"  
             f"Citation Count: {result.get('Citation Count')}\n"
             f"PDF Link: {result.get('PDF Link')}"  
-            for result in all_results
-        ]
-		return "\n\n".join(docs)
+            for result in all_results]
+		results = "\n\n".join(docs)
+		if self.save_path is not None:
+			with open(path.join(self.save_path, 'scholar_analytics_results.txt'), 'a') as f:
+				f.write(results)
+		return results
 
 # Google scholar tool
 class GoogleScholarTool(BaseTool):
@@ -114,17 +119,13 @@ class GoogleScholarTool(BaseTool):
         research papers from Google Scholar
         Input should be a search query."""
 	api_wrapper: GoogleScholarSearch 
-	save_path: Optional[str] = Field(description = "path to the storing directory", default = None)
 
 	def _run(self, query:str) -> str:
 		"""
 		Use the tool
 		"""
-		search_results = self.api_wrapper.run(query)
-		if self.save_path is not None:
-			with open(path.join(self.save_path, 'scholar_analytics_results.txt'), 'a') as f:
-				f.write(search_results)
-		return search_results
+		return self.api_wrapper.run(query)
+		
 
 # ############################## #
 # ArXiv Tool					 #
@@ -158,7 +159,7 @@ class ArxivSearch(BaseModel):
 			Journal Reference: {data.get("journal_ref", "None")}\n
 			DOI: {data.get("doi", "None")}\n"""
 			for data in fetched_data]
-
+		
 		return " ************ \n".join(papers)
 
 class ArxivTool(BaseTool):
@@ -176,7 +177,6 @@ class ArxivTool(BaseTool):
 		"""
 		Use the tool
 		"""
-		print('query is', query)
 		return self.api_wrapper.run(query)
 
 
@@ -196,6 +196,7 @@ class PatentSearch(BaseModel):
 	max_number_of_results: int = 10 
 	serp_api_key: Optional[str] = None 
 	patent_search_engine: Any 
+	save_path: str = Field(description = "path to the storing directory of the analytics file")
 
 	@model_validator(mode = 'before')
 	def validate_environment_and_key(cls, values: Dict) -> Dict:
@@ -204,6 +205,9 @@ class PatentSearch(BaseModel):
 			serp_api_key = os.environ["SERP_API_KEY"]
 		client = Client(api_key = serp_api_key)
 		values["patent_search_engine"] = client 
+		save_path = values.get('save_path')
+		if save_path is not None and not path.exists(save_path):
+			makedirs(save_path)
 		return values 
 	
 	def run(self, query:str) -> str:
@@ -237,7 +241,11 @@ class PatentSearch(BaseModel):
                             Inventor: {data.get("inventor")} \n
                             Assignee: {data.get("assignee")} \n
         """ for data in patent_data]
-		return "\n\n".join(patents)
+		search_results = "\n\n".join(patents)
+		if self.save_path is not None:
+			with open(path.join(self.save_path, 'patents_analytics_results.txt'), 'a') as f:
+				f.write(search_results)
+		return search_results
 
 # Google Patent Tool 
 class GooglePatentTool(BaseTool):
@@ -250,17 +258,12 @@ class GooglePatentTool(BaseTool):
         patents from Google Patents
         Input should be a search query."""
 	api_wrapper: PatentSearch 
-	save_path: Optional[str] = Field(description = "path to the storing directory", default = None)
-
 	def _run(self, query:str) -> str:
 		"""
 		Use the tool
 		"""
-		search_results = self.api_wrapper.run(query)
-		if self.save_path is not None:
-			with open(path.join(self.save_path, 'patents_analytics_results.txt'), 'a') as f:
-				f.write(search_results)
-		return search_results
+		return self.api_wrapper.run(query)
+
 
 # ####### Semantic Scholar Custom Tool ####### #
 class SemanticSearch(BaseModel):
@@ -299,8 +302,6 @@ class SemanticSearch(BaseModel):
 	
 	def retrieve_results(self, results: Any) -> Dict[str, str]:
 		retrieved_items = {key:[] if key != "externalIds" else "DOI" for key in self.fields}
-		print("retrieved items are ", retrieved_items)
-		print(f"the length of results are {len(results)}")
 		try:
 			for item in results:
 				for field in self.fields:
@@ -630,8 +631,8 @@ def get_tool(tool_name: str, tools_kwargs: Dict) -> BaseTool:
 		return ArxivTool(api_wrapper = ArxivSearch(page_size = page_size, max_results = max_results))
 	
 	elif tool_name == 'google_scholar_search':
-		return GoogleScholarTool(api_wrapper = GoogleScholarSearch(top_k_results = tools_kwargs.get('max_results', 20)), 
-				save_path = tools_kwargs.get('save_path', path.join(os.getcwd(), 'pdfs')))
+		return GoogleScholarTool(api_wrapper = GoogleScholarSearch(top_k_results = tools_kwargs.get('max_results', 20), 
+					save_path = tools_kwargs.get('save_path', path.join(os.getcwd(), 'pdfs'))))
 	
 	elif tool_name == 'google_patent_search':
 		return GooglePatentTool(api_wrapper = PatentSearch(max_number_of_results = tools_kwargs.get('max_results', 20), 
