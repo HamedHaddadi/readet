@@ -1,8 +1,7 @@
 import pytest 
 from unittest import TestCase
 from os import path, getcwd, makedirs, listdir
-from shutil import rmtree
-from peruse.core.retrievers import PlainRetriever, ParentDocument, get_retriever
+from readet.core.retrievers import PlainRetriever, ParentDocument, get_retriever
 
 @pytest.mark.skip(reason = "tested and to avoid exhausting API calls")
 def test_plain_retriever_add_pdf(single_pdf_file, pdf_file_list):
@@ -28,9 +27,6 @@ class TestParentDocument(TestCase):
 					'child_splitter': 'recursive', 'parent_chunk_size': 2000,
 					'child_chunk_size': 2000, 'parent_chunk_overlap': 200, 'child_chunk_overlap': 100}
 	
-#	@classmethod
-#	def tearDownClass(cls) -> None:
-#		rmtree(cls.save_path)
 	
 	def test_docstore_persist_on_dist_init_from_pdf(self):
 		store_path = path.join(self.save_path, 'docstore')

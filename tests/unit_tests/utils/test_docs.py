@@ -1,6 +1,5 @@
 # test docs module
-import pytest 
-from peruse.utils import docs
+from readet.utils import docs
 from langchain_core.documents import Document
 
 	 

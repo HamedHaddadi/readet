@@ -2,7 +2,7 @@
 # All agents and LangGraph based agents for summary creation #
 # ########################################################## #
 import operator 
-from typing import  List, Literal, Dict, Any, TypedDict, Annotated  
+from typing import  List, Literal, Dict, TypedDict, Annotated  
 from collections.abc import Callable 
 from langchain.chains.combine_documents.reduce import (collapse_docs, split_list_of_docs)
 from langchain_core.documents import Document 	
@@ -84,6 +84,7 @@ class MapReduceSummarizer(Callable):
 		self.reduce_chain = (PromptTemplate.from_template(REDUCE_PROMPT) | self.llm | StrOutputParser())
 		self.max_token = max_token
 		self.runnable = None 
+		self.built = False 
 	
 	def length_function(self, documents: List[Document]) -> int:
 		return sum([self.llm.get_num_tokens(doc.page_content) for doc in documents])
@@ -129,6 +130,7 @@ class MapReduceSummarizer(Callable):
 		graph.add_conditional_edges("collapse_summaries", self.should_collapse)
 		graph.add_edge("generate_final_summary", END)
 		self.runnable = graph.compile()
+		self.built = True 
 	
 	def __call__(self, pdf_file: str | List[str], document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 					splitter: Literal['recursive', 'token'] | None = 'recursive', 
@@ -136,6 +138,8 @@ class MapReduceSummarizer(Callable):
 		"""
 		no streaming is supported for this summarizer
 		"""
+		if not self.built:
+			self.build()
 		documents = docs.doc_from_pdf_files(pdf_file, document_loader = document_loader, 
 									 	splitter = splitter, chunk_size = chunk_size, chunk_overlap = chunk_overlap)
 		contents = [doc.page_content for doc in documents]

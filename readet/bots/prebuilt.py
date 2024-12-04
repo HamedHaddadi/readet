@@ -4,15 +4,14 @@
 # ################################################## #
 from os import PathLike 
 from pydantic import BaseModel, Field   
-from typing import Union, Sequence, Literal, Annotated, List, Optional
-from functools import partial 
+from typing import Union, Sequence, Literal, Annotated, List
 # langchain, langgraph 
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import StateGraph, START, END 
 from langgraph.checkpoint.memory import MemorySaver 
-# peruse modules 
+# readet modules 
 from .. utils import models  
-from .. core import tools as peruse_tools 
+from .. core import tools as readet_tools 
 from . agents import ReAct 
 from . components import *  
 
@@ -190,27 +189,27 @@ class ResearchAssistant:
 	def _configure_search_runnable(self, max_results: int = None,
 								 	 page_size: int = None) -> None:
 		llm = models.configure_chat_model(self.spacial_agent_llm, temperature = 0)
-		self.search_tools = [peruse_tools.get_tool(tool, {'save_path': self.save_path, 
+		self.search_tools = [readet_tools.get_tool(tool, {'save_path': self.save_path, 
 						'max_results': max_results, 'page_size': page_size}) for tool in self.SEARCH_TOOL_NAMES]
 		search_prompt = ChatPromptTemplate.from_messages(self.SEARCH_MESSAGE)
 		self.search_runnable = search_prompt | llm.bind_tools(self.search_tools + [CompleteOrEscalate]) 
 
 	def _configure_list_files_runnable(self) -> None:
 		llm = models.configure_chat_model(self.spacial_agent_llm, temperature = 0)
-		self.list_files_tools = [peruse_tools.get_tool("list_files", tools_kwargs = {'save_path': self.save_path, 'suffix': '.pdf'})]
+		self.list_files_tools = [readet_tools.get_tool("list_files", tools_kwargs = {'save_path': self.save_path, 'suffix': '.pdf'})]
 		list_files_prompt = ChatPromptTemplate.from_messages(self.LIST_FILES_MESSAGE)
 		self.list_files_runnable = list_files_prompt | llm.bind_tools(self.list_files_tools + [CompleteOrEscalate]) 
 
 	def _configure_summary_runnable(self, summarizer_type: str, summary_chat_model: str) -> None:
 		llm = models.configure_chat_model(summary_chat_model, temperature = 0)
-		self.summary_tools = [peruse_tools.get_tool("summarize_pdfs", tools_kwargs = {'save_path': self.save_path, 'chat_model': summary_chat_model, 
+		self.summary_tools = [readet_tools.get_tool("summarize_pdfs", tools_kwargs = {'save_path': self.save_path, 'chat_model': summary_chat_model, 
 														"summarizer_type": summarizer_type})]
 		summary_prompt = ChatPromptTemplate.from_messages(self.SUMMARY_MESSAGE)
 		self.summary_runnable = summary_prompt | llm.bind_tools(self.summary_tools + [CompleteOrEscalate]) 
 
 	def _configure_rag_runnable(self) -> None:
 		llm = models.configure_chat_model(self.spacial_agent_llm, temperature = 0)
-		self.rag_tools = [peruse_tools.get_tool("rag", tools_kwargs = {'save_path': self.save_path})] 
+		self.rag_tools = [readet_tools.get_tool("rag", tools_kwargs = {'save_path': self.save_path})] 
 		rag_prompt = ChatPromptTemplate.from_messages(self.RAG_MESSAGE)
 		self.rag_runnable = rag_prompt | llm.bind_tools(self.rag_tools + [CompleteOrEscalate]) 
 

@@ -2,7 +2,7 @@ import pytest
 import unittest
 from shutil import rmtree 
 from os import path, getcwd, makedirs  
-from peruse.core import tools 
+from readet.core import tools 
 
 
 @pytest.mark.skip(reason = "tested and to avoid exhausting API calls")

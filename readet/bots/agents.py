@@ -4,7 +4,7 @@ from pprint import pprint
 import operator 
 from pydantic import BaseModel, Field 
 from .. utils import models
-from .. core import tools as peruse_tools   
+from .. core import tools as readet_tools   
 from langchain_core.prompts import ChatPromptTemplate 
 # langgraph imports
 from langgraph.graph import END, StateGraph
@@ -36,7 +36,7 @@ class ReAct:
 		if isinstance(tools, BaseTool):
 			tools = [tools]
 		elif isinstance(tools, Sequence) and all(isinstance(tool, str) for tool in tools):
-			tools = [peruse_tools.get_tool(tool, tools_kwargs) for tool in tools]
+			tools = [readet_tools.get_tool(tool, tools_kwargs) for tool in tools]
 		return tools 
 
 	def run(self, query: str):

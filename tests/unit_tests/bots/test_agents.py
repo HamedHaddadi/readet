@@ -1,7 +1,7 @@
 import unittest
 from os import path, listdir, getcwd, makedirs 
 from shutil import rmtree
-from peruse.bots.agents import ReAct
+from readet.bots.agents import ReAct
 
 
 class TestReactAgent(unittest.TestCase):

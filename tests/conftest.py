@@ -1,10 +1,9 @@
 import pytest 
-from shutil import rmtree
-from os import path, listdir, getcwd, makedirs, rmdir 
+from os import path, listdir, getcwd 
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-load_dotenv('./peruse/configs/keys.env')
+load_dotenv('./configs/keys.env')
 
 @pytest.fixture
 def pdf_file_list():

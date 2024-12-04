@@ -1,5 +1,5 @@
 
-from peruse.core.chains import TitleExtractor
+from readet.core.chains import TitleExtractor
 
 def test_title_extractor_with_openai_models():
 	""" tests initialization of title extractor with openai models """

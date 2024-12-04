@@ -97,8 +97,9 @@ class PlainRetriever(Retriever):
 				embeddings: str = 'openai-text-embedding-3-large',
 				document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 				splitter: Literal['recursive', 'token'] = 'recursive',
-				splitter_kwargs: Dict[str, Any] = {}) -> PR:
-		documents = docs.doc_from_pdf_files(pdf_files, document_loader, splitter, splitter_kwargs)
+				chunk_size: int = 2000, chunk_overlap: int = 200) -> PR:
+		documents = docs.doc_from_pdf_files(pdf_files, document_loader, splitter, 
+									  	chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 		return cls(documents, embeddings)
 
 # ######################################### #
@@ -353,11 +354,11 @@ def get_retriever(documents: List[Document] | List[str] | str,
 						child_chunk_size = kwargs.get('child_chunk_size', 2000), parent_chunk_overlap = kwargs.get('parent_chunk_overlap', 200),
 								child_chunk_overlap = kwargs.get('child_chunk_overlap', 100))																										
 		else:
-			retriever = ContextualCompression(documents, embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'), 
+			retriever = ParentDocument(documents, embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'),
 				store = kwargs.get('store', None), store_path = kwargs.get('store_path', None),
-				parent_splitter = kwargs.get('parent_splitter', 'token'), child_splitter = kwargs.get('child_splitter', 'recursive'),
-					parent_chunk_size = kwargs.get('parent_chunk_size', 2000), child_chunk_size = kwargs.get('child_chunk_size', 2000),
-						parent_chunk_overlap = kwargs.get('parent_chunk_overlap', 200), child_chunk_overlap = kwargs.get('child_chunk_overlap', 100))
+					parent_splitter = kwargs.get('parent_splitter', 'token'), child_splitter = kwargs.get('child_splitter', 'recursive'),
+						parent_chunk_size = kwargs.get('parent_chunk_size', 2000), parent_chunk_overlap = kwargs.get('parent_chunk_overlap', 200),
+							child_chunk_size = kwargs.get('child_chunk_size', 2000), child_chunk_overlap = kwargs.get('child_chunk_overlap', 100))
 		
 		retriever.build()
 		return retriever 

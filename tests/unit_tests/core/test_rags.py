@@ -2,9 +2,8 @@ from os import path, getcwd, makedirs, listdir
 import pytest 
 from shutil import rmtree
 from unittest import TestCase
-from langchain_core.stores import BaseStore
-from peruse.core.retrievers import ParentDocument, get_retriever
-from peruse.core.rags import (RAGWithCitations, PlainRAG,
+from readet.core.retrievers import ParentDocument, get_retriever
+from readet.core.rags import (RAGWithCitations, PlainRAG,
 							   AVAILABLE_RETRIEVERS, AgenticRAG, SelfRAG, RAGEnsemble)
 
 def test_plain_rag_for_different_retrievers(single_pdf_file):

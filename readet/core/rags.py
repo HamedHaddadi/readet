@@ -2,50 +2,26 @@
 # All RAGS and query systems		#
 # ################################# #
 from typing import (Optional, Dict, List,Union, Any, TypedDict, Annotated, Sequence, Literal)
-from langchain_community.document_loaders import PyPDFLoader, pdf  
-from langchain_text_splitters import RecursiveCharacterTextSplitter 
-from langchain_chroma import Chroma
 from langchain_core.documents import Document 
 from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.prompts import BasePromptTemplate, PromptTemplate, ChatPromptTemplate, format_document  
 from langchain_core.runnables.base import RunnableSequence 
-from langchain_core.runnables import RunnablePassthrough, Runnable 
+from langchain_core.runnables import RunnablePassthrough 
 from langchain_core.output_parsers import StrOutputParser 
 from pydantic import BaseModel, Field 
 from langchain_core.retrievers import BaseRetriever
-from langchain_core.tools import BaseTool  
+from langchain_core.tools import BaseTool, create_retriever_tool  
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition 
 from langgraph.graph.message import add_messages 
 from pprint import pprint 
-from pathlib import Path 
 from collections.abc import Callable
 from . retrievers import get_retriever, Retriever 
-from .. utils import prompts, models, docs
+from .. utils import prompts, models
 from .. utils.schemas import SCHEMAS 
 
-AVAILABLE_RETRIEVERS = ['parent-document']
+AVAILABLE_RETRIEVERS = ['parent-document', 'plain']
 
-# ##### classes that are useful for all RAGS ##### #
-class RetrieverRunnable(BaseModel):
-	"""
-	Takes a retriever as an attribute and invokes a query on the retriever
-	"""
-	runnable: BaseRetriever
-	prompt: BasePromptTemplate = PromptTemplate.from_template("{page_content}")
-
-	def run(self, query: str) -> str:
-		docs = self.runnable.invoke(query)
-		return "\n\n".join(format_document(doc, self.prompt) for doc in docs)
-
-class RetrieverTool(BaseTool):
-	name: str = "retriever_tool"
-	description: str = """retriever tool which is used to retriever documents from a 
-				vector store. """
-	retriever: RetrieverRunnable 
-
-	def _run(self, query: str) -> str:
-		return self.retriever.run(query)
 
 # ################################### #
 # Plain RAG  						  #
@@ -263,7 +239,7 @@ class SelfRAG:
 	"""
 	RECURSION_LIMIT = 40
 	def __init__(self, documents: Optional[Union[List[Document],List[str],str]] = None,
-		retriever: Union[str, Retriever] = 'parent-document',
+		retriever: Union[Literal['parent-document', 'plain'], Retriever] = 'parent-document',
 			store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
 			splitter: Literal['recursive', 'token'] = 'recursive',
 				document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
@@ -464,7 +440,6 @@ class SelfRAG:
 	def build(self) -> None:
 		if not self.configured:
 			self.configure()
-			self.configured = True 
 		flow = StateGraph(GraphState)
 		flow.add_node("retrieve", self.retrieve)
 		flow.add_node("grade_answers", self.grader_answers)
@@ -489,24 +464,36 @@ class SelfRAG:
 	# other helper methods 
 	def _run(self, question: str) -> str:
 		inputs = {"question": question}
-		outputs = self.runnable.invoke(inputs)
-		return outputs["generation"]
+		response = "did not find an answer to this question!!!"
+		try:
+			outputs = self.runnable.invoke(inputs)
+			response = outputs["generation"]
+		except:
+			pass 
+		return response 
 
 	def _run_stream(self, question: str, stream_mode: Literal['updates', 'values'] = 'updates') -> None:
 		inputs = {"question": question}
-		for output in self.runnable.stream(inputs, {"recursion_limit": self.RECURSION_LIMIT}, stream_mode = stream_mode):
-			for key,value in output.items():
-				pprint(f"Node '{key}' : ")
-			pprint("*****")
-		pprint(value["generation"])		
+		response = "did not find an answer to this question!!!"
+		try:
+			for output in self.runnable.stream(inputs, {"recursion_limit": self.RECURSION_LIMIT}, stream_mode = stream_mode):
+				for key,value in output.items():
+					pprint(f"Node '{key}' : ")
+				pprint("*****")
+				response = value["generation"]
+		except:
+			pass 
+		return response		
 	
 	def run(self, question: str, stream: bool = False, stream_mode: Literal['updates', 'values'] = 'updates') -> Union[str, None]:
 		if not self.built:
 			self.build()
+		response = "did not find an answer to this question!!!"
 		if stream:
-			self._run_stream(question, stream_mode = stream_mode)
+			response = self._run_stream(question, stream_mode = stream_mode)
 		else:
-			return self._run(question)
+			response = self._run(question)
+		return response 
 	
 	def add_pdf(self, pdf_file: str) -> None:
 		self.configured = False 
@@ -539,7 +526,7 @@ class AgenticRAG:
 	agentic RAG that runs a RAG on a single pdf file. 
 	"""
 	def __init__(self, documents: Optional[Union[List[Document],List[str],str]] = None,
-			  	retriever: Union[str, Retriever] = 'parent-document',
+			  	retriever: Union[Literal['parent-document', 'plain'], Retriever] = 'parent-document',
 				  store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
 				  splitter: Literal['recursive', 'token'] = 'recursive',
 						document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
@@ -550,7 +537,6 @@ class AgenticRAG:
 		
 		if isinstance(retriever, Retriever):
 			self.retriever = retriever
-			print('the retriever is: ', type(self.retriever))
 		elif isinstance(retriever, str) and retriever.lower() in AVAILABLE_RETRIEVERS:
 			self.retriever = get_retriever(documents = documents, retriever_type = retriever,
 				embeddings = embeddings, document_loader = document_loader, splitter = splitter,
@@ -558,7 +544,7 @@ class AgenticRAG:
 		else:
 			raise ValueError(f"retriever must be a Retriever object or a string in ['parent-document']")
 		
-		self.retriever_tool = RetrieverTool(retriever = RetrieverRunnable(runnable = self.retriever.runnable))
+		self.retriever_tool = create_retriever_tool(self.retriever.runnable, name = 'retriever', description = 'retrieve documents from the retriever')
 
 		self.relevance_chain = None 
 		self.generate_chain = None
@@ -568,16 +554,15 @@ class AgenticRAG:
 		self.configured = False
 		self.built = False  
 		
-	
 	def set_retriever(self, retriever: Retriever) -> None:
 		if isinstance(retriever, Retriever):
 			self.retriever = retriever
-			self.retriever_tool = RetrieverTool(retriever = RetrieverRunnable(runnable = self.retriever.runnable))
+			self.retriever_tool = create_retriever_tool(self.retriever.runnable, name = 'retriever', description = 'retrieve documents from the retriever')
 		else:
 			raise ValueError(f"setting retriever after initialization must be a Retriever object")
 	
 	def _configure_relevance_check_chain(self) -> None:
-		llm = models.configure_chat_model(self.chat_model, temperature = 0)
+		llm = models.configure_chat_model(self.chat_model, temperature = 0, streaming = True)
 		model_with_struct = llm.with_structured_output(RelevanceGrader)
 		template = prompts.TEMPLATES['agentic-rag']['relevance-grader']
 		prompt = PromptTemplate.from_template(template)
@@ -603,7 +588,8 @@ class AgenticRAG:
 		question = messages[0].content 
 		context = last_message.content 
 
-		score = self.relevance_chain.invoke({"question": question, "context": context}).binary_score 
+		score_results = self.relevance_chain.invoke({"question": question, "context": context})
+		score = score_results.binary_score 
 		if score == "yes":
 			return "generate"
 		elif score == "no":
@@ -669,7 +655,6 @@ class AgenticRAG:
 
 		if not self.configured:
 			self.configure()
-			self.configured = True 
 
 		flow = StateGraph(AgentState)
 		flow.add_node("agent", self._agent)
@@ -689,16 +674,17 @@ class AgenticRAG:
 	# run methods 
 	def _run_stream(self, query: str):
 		inputs = {"messages": [("user", query)]}
+		response = "did not find an answer to this question!!! make your question more specific"
 		for output in self.runnable.stream(inputs, stream_mode = 'updates'):
 			for key, value in output.items():
 				if key == 'generate':
-					print(value["messages"][-1])
-					pprint("\n---\n")
+					response = value["messages"][-1]
+		return response 
+		
 	
 	def _run(self, query: str) -> str:
 		inputs = {"messages": [(query),]}
 		output = self.runnable.invoke(inputs, stream_mode= "updates")
-		print('output', output)
 		if 'generate' in output[-1].keys():
 			return output[-1]["generate"]["messages"][-1]
 		else:
@@ -707,10 +693,12 @@ class AgenticRAG:
 	def run(self, query: str, stream: bool = False) -> Union[str, None]:
 		if not self.built:
 			self.build()
+		response = "did not find an answer to this question!!! make your question more specific"
 		if not stream:
-			return self._run(query)
+			response =  self._run(query)
 		else:
-			self._run_stream(query)
+			response = self._run_stream(query)
+		return response 
 	
 	def add_pdf(self, pdf_file: str) -> None:
 		self.configured = False 
