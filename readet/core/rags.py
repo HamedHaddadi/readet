@@ -7,6 +7,7 @@ from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.prompts import BasePromptTemplate, PromptTemplate, ChatPromptTemplate, format_document  
 from langchain_core.runnables.base import RunnableSequence 
 from langchain_core.runnables import RunnablePassthrough 
+from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.output_parsers import StrOutputParser 
 from pydantic import BaseModel, Field 
 from langchain_core.retrievers import BaseRetriever
@@ -21,7 +22,6 @@ from .. utils import prompts, models
 from .. utils.schemas import SCHEMAS 
 
 AVAILABLE_RETRIEVERS = ['parent-document', 'plain']
-
 
 # ################################### #
 # Plain RAG  						  #
@@ -132,8 +132,24 @@ class RAGWithCitations(PlainRAG):
 	"""
 	RAG with citations class; 
 	class inherits from PlainRAG class and accepts identical parameters
-		Main methods:
-			build(self): builds the RAG chain
+	input parameters:
+		documents: documents to be used for creating the retriever
+		retriever: type of retriever to be used. Currently supporting parent-document retriever.
+			Note that retriever can also be a Retriever object
+		embeddings: embeddings model to be used
+		chat_model: chat model to be used
+		prompt: prompt to be used
+		document_loader: document loader to be used
+		splitter: splitter to be used 
+		load_version_number: version number of the retriever to be loaded from disk; if None a brand new retriever is created and persisted on disk
+		store_path: path to store the retriever on disk. if None, retriever is not persisted on disk
+	Attributes:
+		retriever: retriever object
+		llm: language model object
+		prompt: prompt object
+		runnable: the RAG chain which can be invoked based on the query
+	Main methods:
+		build(self): builds the RAG chain
 			run(self, query: str): invokes the RAG chain
 			__call__(self, query: str): invokes the RAG chain
 	"""
@@ -236,6 +252,17 @@ class SelfRAG:
 	There are three main methods:
 		build(self): which builds the graph
 		run(self): whicb runs the graph
+	parameters 
+		documents: documents to be used for creating the retriever
+		retriever: type of retriever to be used. Currently supporting parent-document retriever.
+			Note that retriever can also be a Retriever object
+		embeddings: embeddings model to be used
+		chat_model: chat model to be used
+		prompt: prompt to be used
+		document_loader: document loader to be used
+		splitter: splitter to be used 
+		load_version_number: version number of the retriever to be loaded from disk; if None a brand new retriever is created and persisted on disk
+		store_path: path to store the retriever on disk. if None, retriever is not persisted on disk
 	"""
 	RECURSION_LIMIT = 40
 	def __init__(self, documents: Optional[Union[List[Document],List[str],str]] = None,
@@ -716,6 +743,17 @@ class AgenticRAG:
 class RAGEnsemble(Callable):
 	"""
 	An ensemble of RAGs that are used to answer a question
+	parameters:
+		documents: documents to be used for creating the retriever
+		retriever: type of retriever to be used. Currently supporting parent-document retriever.
+			Note that retriever can also be a Retriever object
+		store_path: path to store the retriever on disk. if None, retriever is not persisted on disk
+		load_version_number: version number of the retriever to be loaded from disk; if None a brand new retriever is created and persisted on disk
+		splitter: splitter to be used 
+		document_loader: document loader to be used
+		chat_model: chat model to be used
+		embeddings: embeddings model to be used
+		kwargs: additional keyword arguments to be passed to the retriever
 	"""
 	RAG_TYPES = {'plain_rag': PlainRAG, 'agentic_rag': AgenticRAG, 'self-rag': SelfRAG}
 	def __init__(self, documents: List[Document] | List[str] | str,
@@ -738,10 +776,340 @@ class RAGEnsemble(Callable):
 		results = {}
 		for rag_name in self.rags.keys():
 			results[rag_name] = self.rags[rag_name](query)
-		return '\n'.join([f"{rag}: {response}" for rag,response in results.items()])
+		return '\n'.join([f" >>> {rag}: {response}" for rag,response in results.items()])
 	
 	def __call__(self, query: str) -> str:
 		return self.run(query)
+
+# ########################################## #
+# Adaptive RAG								 #
+# ########################################## #
+
+class AdaptiveRAGState(TypedDict):
+	"""
+	state of the adaptive RAG graph
+	Attributes:
+		question: question to be answered
+		generation: LLM generation
+		documents: list of retrieved documents
+	"""
+	question: str 
+	generation: str 
+	documents: List[Document]
+
+class AdaptiveRAG:
+	"""
+	An adaptive RAG implementation. 
+	Method performs a query screening; if the answer is relevant to the index, it is returned. 
+	Otherwise, the query is redirected to a web search.
+	Query is refined based on analysis of the RAG response.
+	input parameters:
+		documents: documents to be used for creating the retriever
+		documents types: list of documents, list of strings, or a single string
+		retriever: type of retriever to be used. Currently supporting parent-document retriever.
+			Note that retriever can also be a Retriever object
+		retriever types: string in ['parent-document'] or a Retriever object
+		store_path: path to store the retriever on disk. if None, retriever is not persisted on disk
+		store_path type: string
+		load_version_number: version number of the retriever to be loaded from disk; if None a brand new retriever is created and persisted on disk
+		load_version_number type: string in ['last'] or an integer
+		splitter: splitter to be used 
+		splitter type: string in ['recursive', 'token']
+		document_loader: document loader to be used
+		document_loader type: string in ['pypdf', 'pymupdf']
+		chat_model: chat model to be used
+		chat_model type: string
+		embeddings: embeddings model to be used
+		embeddings type: string
+		kwargs: additional keyword arguments to be passed to the retriever
+	"""
+	def __init__(self, documents: List[Document] | List[str] | str,
+				retriever: Literal['parent-document'] = 'parent-document',
+					store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
+					splitter: Literal['recursive', 'token'] = 'recursive',
+						document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
+								chat_model: str = "openai-gpt-4o-mini", 
+									embeddings: str = "openai-text-embedding-3-large", 
+										kwargs: Dict[str, Any] = {}):
+		self.runnable = None 
+		if isinstance(retriever, Retriever):
+			self.retriever = retriever
+		elif isinstance(retriever, str) and retriever.lower() in AVAILABLE_RETRIEVERS:
+			self.retriever = get_retriever(documents = documents, retriever_type = retriever,
+				embeddings = embeddings, document_loader = document_loader, splitter = splitter,
+					store_path = store_path, load_version_number = load_version_number, **kwargs)
+		else:
+			raise ValueError(f"retriever must be a Retriever object or a string in ['parent-document']")
+		
+		self.chat_model = chat_model
+		self.embeddings = embeddings
+
+		# chains that are used in ths RAG
+		self.query_router_chain = None 
+		self.document_grader_chain = None 
+		self.rag_chain = None 
+		self.hallucination_grader_chain = None
+		self.answer_grader_chain = None 
+		self.query_rewriter_chain = None
+
+		# tools
+		self.web_search = TavilySearchResults(k = 5) 
+
+		self.configured = False
+		self.built = False 
+	
+	def _configure_query_router_chain(self) -> None:
+		"""
+		configure the query router chain
+		self.query_router_chain is a chain that routes a user query to a vectorstore or web search
+		it can be independently invoked and tested by 
+			self.query_router_chain.invoke({"question": query})
+		"""
+		class RouteQuery(BaseModel):
+			"""Routes a user query to the most relevant source of information"""
+			source: Literal['vectorstore', 'web_search'] = Field(...,
+												 description = "Fiven the user query, choose to route it to the vectorstore or the web search")
+		
+		llm_router = models.configure_chat_model(self.chat_model, temperature = 0)
+		llm_with_struct = llm_router.with_structured_output(RouteQuery)
+		
+		MESSAGE = """ 
+				You are an expert at routing a user question to a vectorstore or web search.
+				The vectorstore contains documents related to fluid dynamics and physics of fluids.
+				Use the vectorstore for questions on these topics. Otherwise, use web-search."""
+
+		prompt = ChatPromptTemplate.from_messages([("system", MESSAGE), ("human", "{question}")])
+		self.query_router_chain = prompt | llm_with_struct
+
+	def _configure_document_grader_chain(self) -> None:
+		"""
+		configure the document grader chain
+		self.document_grader_chain is a chain that grades the relevance of a retrieved document to a user question
+		it can be independently invoked and tested by 
+			self.document_grader_chain.invoke({"question": query, "context": context})
+		context is the retrieved document that is obtaibed from the vectorstore:
+			docs = self.retrever.runnable.invoke(question)
+			context = docs[0].page_content
+		"""
+		class GradeDocument(BaseModel):
+			""" Binary score for relevance check on retrieved documents """
+			binary_score: str = Field(description = "documents are relevant to the question, 'yes' or 'no'")
+		
+		llm_grader = models.configure_chat_model(self.chat_model, temperature = 0)
+		llm_with_struct = llm_grader.with_structured_output(GradeDocument)
+
+		MESSAGE = """ 
+				You are a grader assessing relevance of a retrieved document to a user question. 
+    			If the document contains keyword(s) or semantic meaning related to the user question, grade it as relevant. 
+    			It does not need to be a stringent test. The goal is to filter out erroneous retrievals. 
+    			Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question."""
+		prompt = ChatPromptTemplate.from_messages([("system", MESSAGE),
+											  ("human", "Retrieved documents are: {context} \n and user question is: {question}")])
+		self.document_grader_chain = prompt | llm_with_struct
+	
+	def _configure_rag_chain(self) -> None:
+		"""
+		configure the rag chain
+		"""
+		TEMPLATE = """ 
+			You are an assistant for question-answering tasks.
+			Use the following pieces of retrieved context to answer the question.
+			If you don't know the answer, just say that you don't know.
+			Use three sentences maximum and keep the answer concise.
+			Question: {question} \nContext: {context} Answer:"""
+		prompt = ChatPromptTemplate.from_template(TEMPLATE)
+		llm = models.configure_chat_model(self.chat_model, temperature = 0)
+		self.rag_chain = prompt | llm | StrOutputParser()
+	
+	def _configure_hallucination_grader_chain(self) -> None:
+		"""
+		configure the hallucination grader chain
+		"""
+		class GradeHallucination(BaseModel):
+			""" Binary score for hallucination present in generated answers """
+			binary_score: str = Field(description = "Answer is grounded in facts, 'yes' or 'no'")
+		
+		hal_llm = models.configure_chat_model(self.chat_model, temperature = 0)
+		llm_with_struct = hal_llm.with_structured_output(GradeHallucination)
+		MESSAGE = """ You are a grader assessing whether an LLM generation 
+		is grounded in / supported by a set of retrieved facts. \n 
+     	Give a binary score 'yes' or 'no'. 
+		'Yes' means that the answer is grounded in / supported by the set of facts.
+		'No' means that the answer is not grounded in / supported by the set of facts.
+		"""
+		prompt = ChatPromptTemplate.from_messages([("system", MESSAGE),
+											  ("human", "Set of facts: {documents} \n LLM generation: {generation}")])
+		self.hallucination_grader_chain = prompt | llm_with_struct
+
+
+	def _configure_answer_grader_chain(self) -> None:
+		"""
+		configure the answer grader chain
+		"""
+		class GradeAnswer(BaseModel):
+			""" Binary score to assess if answer addresses the question"""
+			binary_score: str = Field(description = "Answer addresses the question, 'yes' or 'no'")
+		
+		llm_grader = models.configure_chat_model(self.chat_model, temperature = 0)
+		llm_with_struct = llm_grader.with_structured_output(GradeAnswer)
+
+		MESSAGE = """ You are a grader assessing whether an LLM generation 
+		addresses/resolves a question. \n Give a binary score 'yes' or 'no'. 
+		'Yes' means that the answer addresses/resolves the question.
+		'No' means that the answer does not address/resolve the question.
+		"""
+		prompt = ChatPromptTemplate.from_messages([("system", MESSAGE),
+											  ("human", "User question: {question} \n LLM generated answer is: {generation}")])
+		self.answer_grader_chain = prompt | llm_with_struct
+
+	def _configure_query_rewriter_chain(self) -> None:
+		"""
+		configure the query rewriter chain
+		"""
+		llm = models.configure_chat_model(self.chat_model, temperature = 0)
+		SYSTEM = """
+			You a question re-writer that converts an input question to a better version that is optimized \n 
+     		for vectorstore retrieval. Look at the input and try to reason about the underlying semantic intent / meaning.
+		"""
+		prompt = ChatPromptTemplate.from_messages([("system", SYSTEM), ("human", "here is the question: {question} \n formulate a better question")])
+		self.query_rewriter_chain = prompt | llm | StrOutputParser() 
+	
+	def configure(self) -> None:
+		self._configure_query_router_chain()
+		self._configure_document_grader_chain()
+		self._configure_rag_chain()
+		self._configure_hallucination_grader_chain()
+		self._configure_answer_grader_chain()
+		self._configure_query_rewriter_chain()
+		self.configured = True
+	
+	# functions to be called on the graph are define here
+	def retrieve(self, state: AdaptiveRAGState) -> Dict[str, Any]:
+		question = state["question"]
+		documents = self.retriever.runnable.invoke(question)
+		return {"documents": documents, "question": question}
+	
+	def generate(self, state: AdaptiveRAGState) -> Dict[str, Any]:
+		question = state["question"]
+		documents = state["documents"]
+		generation = self.rag_chain.invoke({"question": question, "context": documents})
+		return {"generation": generation, "question": question, "documents": documents}
+	
+	def grade_document(self, state: AdaptiveRAGState) -> Dict[str, Any]:
+		question = state["question"]
+		documents = state["documents"]
+		screened_documents = []
+		for d in documents:
+			score = self.document_grader_chain.invoke({"question": question, "context": d.page_content})
+			grade = score.binary_score
+			if grade == "yes":
+				screened_documents.append(d)
+		return {"screened_documents": screened_documents, "question": question}
+
+	def transform_query(self, state: AdaptiveRAGState) -> Dict[str, Any]:
+		question = state["question"]
+		documents = state["documents"]
+		transformed_question = self.query_rewriter_chain.invoke({"question": question})
+		return {"question": transformed_question, "documents": documents}
+	
+	def web_search(self, state: AdaptiveRAGState) -> Dict[str, Any]:
+		question = state["question"]
+		search_results = self.web_search.invoke({"quesry": question})
+		web_results = "\n".join([d["content"] for d in search_results])
+		web_results = Document(page_content = web_results)
+		return {"documents": [web_results], "question": question}
+	
+	def route_question(self, state: AdaptiveRAGState) -> Literal['vectorstore', 'web_search']:
+		question = state["question"]
+		source = self.query_router_chain.invoke({"question": question})
+		if source.source == "vectorstore":
+			return "vectorstore"
+		elif source.source == "web_search":
+			return "web_search"
+	
+	def decide_to_generate(self, state: AdaptiveRAGState) -> Literal['transform_query', 'generate']:
+		decision = state["documents"]
+		if not decision:
+			return "transform_query"
+		else:
+			return "generate"
+	
+	def grade_generation(self, state: AdaptiveRAGState) -> Literal['useful', 'not useful', 'not supported']:
+		question = state["question"]
+		documents = state["documents"]
+		generation = state["generation"]
+		score = self.hallucination_grader_chain.invoke({"documents": documents, "generation": generation})
+		grade = score.binary_score
+		if grade == "yes":
+			score = self.answer_grader_chain.invoke({"question": question, "generation": generation})
+			grade = score.binary_score
+			if grade == "yes":
+				return "useful"
+			else:
+				return "not useful"
+		else:
+			return "not supported"
+	
+	def build(self) -> None:
+		if not self.configured:
+			self.configure()
+		flow = StateGraph(AdaptiveRAGState)
+		flow.add_node("web_search", self.web_search)
+		flow.add_node("retrieve", self.retrieve)
+		flow.add_node("grade_documents", self.grade_document)
+		flow.add_node("generate", self.generate)
+		flow.add_node("transform_query", self.transform_query)
+
+		flow.add_conditional_edges(START, self.route_question, {"web_search":"web_search",
+														   "vectorstore":"retrieve"})
+		flow.add_edge("web_search", "generate")
+		flow.add_edge("retrieve", "grade_documents")
+
+		flow.add_conditional_edges("grade_documents", self.decide_to_generate, 
+							 	{"transform_query":"transform_query", "generate":"generate"})
+		
+		flow.add_edge("transform_query", "retrieve")
+
+		flow.add_conditional_edges("generate", self.grade_generation, 
+							 	{"useful":END, "not useful":"transform_query",
+							 		"not supported":"generate"})
+		
+		self.runnable = flow.compile()
+		self.built = True
+	
+	# run the graph
+	def _run_stream(self, query: str) -> str:
+		"""
+		use this for debugging only
+		"""
+		inputs = {"question": query}
+		for output in self.runnable.stream(inputs, stream_mode = "updates"):
+			for key,value in output.items():
+				print(f"the key value is {key} and the value is {value}")
+		return value["generation"]
+
+	def _run(self, query: str) -> str:
+		inputs = {"question": query}
+		response = self.runnable.invoke(inputs)
+		return response["generation"]
+
+	
+	def run(self, query: str, stream: bool = False) -> str:
+		if not self.built:
+			self.build()
+		if stream:
+			return self._run_stream(query)
+		else:
+			return self._run(query)
+	
+	def add_pdf(self, pdf_file: str) -> None:
+		self.configured = False 
+		self.retriever.add_pdf(pdf_file)
+		self.build()
+	
+
+
+
 
 
 		

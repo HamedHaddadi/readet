@@ -23,6 +23,9 @@ PLAIN_SUMMARY_PROMPT = """
 class PlainSummarizer(Callable):
 	"""
 	uses a simple (prompt | llm) chain to generate a summary of a text
+	parameters:
+		chat_model: chat model to be used
+		temperature: temperature to be used
 	"""
 	def __init__(self, chat_model: str = 'openai-gpt-4o-mini', temperature: int = 0):
 		llm = models.configure_chat_model(chat_model, temperature = temperature)
@@ -33,6 +36,15 @@ class PlainSummarizer(Callable):
 	def __call__(self, pdf_file: str | List[str], document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 					splitter: Literal['recursive', 'token'] | None = 'recursive', 
 						chunk_size: int = 2000, chunk_overlap: int = 200) -> str:
+		"""
+		no streaming is supported for this summarizer
+		input parameters:
+			pdf_file: pdf file to be summarized
+			document_loader: document loader to be used
+			splitter: splitter to be used 
+			chunk_size: chunk size to be used
+			chunk_overlap: chunk overlap to be used
+		"""
 		document = docs.doc_from_pdf_files(pdf_file, document_loader = document_loader, splitter = splitter, 
 									 	chunk_size = chunk_size, chunk_overlap = chunk_overlap)
 		if document is not None:
