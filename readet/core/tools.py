@@ -3,17 +3,12 @@
 # ########################################### #
 import os
 import re 
-import plotly 
-from time import time
-import pandas as pd  
 from pathlib import Path 
 from os import path, makedirs, listdir, PathLike 
-import plotly.express as px 
 from tqdm import tqdm 
 from arxiv import Search as ArSearch 
 from arxiv import Client as ArClient    
 from serpapi import Client 
-from semanticscholar import SemanticScholar 
 from pydantic import BaseModel, Field, root_validator, model_validator
 from langchain_core.tools import BaseTool 
 from langchain_core.prompts import PromptTemplate  
@@ -261,62 +256,6 @@ class GooglePatentTool(BaseTool):
 		return self.api_wrapper.run(query)
 
 
-# ####### Semantic Scholar Custom Tool ####### #
-class SemanticSearch(BaseModel):
-	"""
-	Wrapper for Semantic Scholar Search with custom outputs. 
-	Attributes:
-		limit: total number of papers to download 
-		timeout: the number of seconds to wait for retrieving a fields from Paper class after semantic search
-		semantic_search_engine: An sinstance of SemanticScholar class 
-		fields: List of fields to retrieve by semantic search 
-	"""
-	limit: int = 20 
-	timeout: int = 10 
-	semantic_search_engine: Any 
-	fields: List = ["title", "abstract", "venue", "year", 
-						"citationCount", "openAccessPdf", 
-							"authors", "externalIds"]
-
-	@root_validator(pre = True)
-	def validate_engine(cls, values:Dict) -> Dict:
-		try:
-			engine = SemanticScholar(timeout = 20)
-		except:
-			raise Exception("can not instantiate SemanticScholarClass")
-		values["semantic_search_engine"] = engine 
-		return values 
-	
-	def timelimit(func):
-		start_time = time.time()
-		def wrapper(self, *args, **kwargs):
-			if time.time() - start_time < self.timeout:
-				return func(*args, **kwargs)
-			else:
-				print("Timeout exceeds for this loop")
-		return wrapper 
-	
-	def retrieve_results(self, results: Any) -> Dict[str, str]:
-		retrieved_items = {key:[] if key != "externalIds" else "DOI" for key in self.fields}
-		try:
-			for item in results:
-				for field in self.fields:
-					if field == 'authors':
-						retrieved_items["authors"].append([auth.get("name") for auth in item["authors"]])
-					elif field == "externalIds":
-						retrieved_items["DOI"].append(item["externalIds"].get("DOI", "Not Available"))
-					else:
-						retrieved_items[field].append(item[field])
-		except:
-			pass 
-		return retrieved_items 
-				
-	def run(self, query: str) -> str:
-		results = self.semantic_search_engine.search_paper(query = query, limit = self.limit, fields = self.fields)
-		retrieved_items = self.retrieve_results(results)
-		return "**********\n\n".join([f"{key} : {value} \n" for key,value in retrieved_items.items()])
-
-
 # #### utilities for downloading pdf files #### #
 class PDFDownload(BaseModel):
 	"""
@@ -552,70 +491,6 @@ class RAGTool(BaseTool):
 	#   print('now I am running the RAG model')
 		return self.rag.run(query) 
 			
-
-# ############################################### 	#
-# A tool to extract keywords from a pdf file and  	#
-# extract keywords and query the pdf using keywords #
-# ##############################################    #
-class QueryByKeywords(BaseTool):
-	"""
-	This tool uses keyword extractor and retrieval augmented generation
-		to extract keywords from a pdf file and stores the results in a text file
-	"""
-	name: str =  "query_by_keywords_store_to_file"
-	description: str =  """
-		A tool to ask questions about a document using keywords that are extracted from the text 
-			It also writes the results to a text file. Use this tool when you are asked to 
-			ask questions about a document using keywords. 
-	"""
-	extractor: ExtractKeywords = Field(description = "the keyword extractor model")
-	rag_chat_model: str = Field(description = "the chat model for the RAG", default = 'openai-gpt-4o-mini')
-	rag_embedding_model: str = Field(description = "the embedding model for the RAG", default = 'openai-text-embedding-3-large')
-	path_to_files: str = Field(description = "path to all pdf files")
-	rag_type: str = Field(description = "the RAG model", default = 'agentic-rag-pdf')
-
-	get_title = staticmethod(lambda file_name: Path(file_name).name.split('.pdf')[0])
-
-	def _run(self, pdf_file: str) -> str:
-		pdf_file = path.join(self.path_to_files, pdf_file)
-		title = self.get_title(pdf_file)
-		rag = RAGS[self.rag_type](pdf_file, chat_model = self.rag_chat_model, 
-					embedding_model = self.rag_embedding_model)
-		rag.build()
-		keywords = self.extractor.run(pdf_file)
-		query_results = {key: None for key in keywords.split(',')}
-		f = open(path.join(self.path_to_files, f'gist_of_{title}.txt'), 'a+')
-		f.write(f'***** TITLE: {title.upper()} ***** \n')
-		for keyword in query_results.keys():
-			query = f"what does the manuscript say about {keyword} ?"
-			results = rag.run(query)
-			print(f'>>> {keyword}: {results} \n\n')
-			f.write(f'>>> {keyword}: {results} \n\n')
-			query_results[keyword] = results
-		f.close()
-		return '===== \n'.join([f"***{key} ==> {result} \n" for key, result in query_results.items() if result is not None])
-
-# #### Charts and Plot Tools #### #
-class BarChart(BaseModel):
-	"""
-	takes a pandas dataframe and plots a barchart
-	"""
-	def run(self, frame: pd.DataFrame, x_label: str, y_label: str, color: str,
-				hover_name: str, hover_data: str) -> None:
-		hover_data = hover_data.split(',')
-		fig = px.bar(frame, y = y_label, x = x_label, orientation = 'h', 
-					color = color, color_continuous_scale = 'Turbo',
-						hover_name = hover_name, hover_data = hover_data,
-                 height = len(frame.index)*30, template = 'seaborn')
-		fig.layout.font.family = 'Gill Sans'
-		fig.layout.font.size = 15
-		fig.layout.xaxis.gridcolor = 'black'
-		fig.layout.yaxis.gridcolor = 'black'
-		fig.layout.xaxis.titlefont.family = 'Gill Sans'
-		fig.layout.xaxis.titlefont.size = 15
-		fig.layout.xaxis.tickfont.size = 15
-		plotly.offline.plot(fig, filename='search_results.html')
-
 
 # helper function to get tools using strings 
 def get_tool(tool_name: str, tools_kwargs: Dict) -> BaseTool:
