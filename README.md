@@ -19,9 +19,9 @@ readet
 │   ├── __init__.py
 │   ├── chains.py
 │   ├── knowledge_graphs.py
-│   ├── **rags.py**
+│   ├── rags.py
 │   ├── retrievers.py
-│   ├── **summarizers.py**
+│   ├── summarizers.py
 │   └── tools.py
 └── utils
     ├── __init__.py
@@ -31,6 +31,16 @@ readet
     ├── prompts.py
     ├── save_load.py
     └── schemas.py
-
-
 ```
+__How to install__ </br>
+I recommend setting up a virtual environment with python version 3.10 </br>
+```console
+conda create -n <name> python=3.10
+```
+This will make sure the package dependencies remain inside the virtual environment. 
+The package can be installed using 
+```console
+pip3 install readet
+```
+
+
