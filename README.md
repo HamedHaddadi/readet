@@ -1,5 +1,5 @@
 # readet
-readet is a package developed using _LangChain_ to peruse scientific and technical literature. But all tools are applicable to any context. </br>
+readet is a package developed using _LangChain_ for perusing scientific and technical literature. But all tools are applicable to any context. </br>
 Eventhough this package has several tools, including multi-agent systems, but the current modules are used more frequently: </br>
 ➡️ summarizers that are used to summarize a text, mostly pdf files. </br>
 ➡️ RAGs or Retrieval Augmented Generation tools which can be used to ask questions about a document. </br>
