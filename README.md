@@ -5,7 +5,7 @@ Eventhough several functionalities are included in this package, such as multi-a
 ➡️ RAGs or Retrieval Augmented Generation tools which can be used to ask questions about a document. </br>
 ➡️ prebuilt agents that are used to download papers and patents in bulk. </br>
 
-here is the curtrent directory tree of the package </br>
+here is the current directory tree of the package </br>
 ```console
 readet
 ├── __init__.py
