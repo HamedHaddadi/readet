@@ -42,5 +42,6 @@ The package can be installed using
 ```console
 pip3 install readet
 ```
+I also included the _requirements.txt_ file.
 
 
