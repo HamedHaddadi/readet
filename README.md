@@ -44,4 +44,14 @@ pip3 install readet
 ```
 I also included the _requirements.txt_ file.
 
+__How to use__ </br>
+This package uses several _API_ s that need API keys. Fortunaletly, all of them are free for a while (or forever if you do not use them too often). Here is the list of APIs </br>
+1️⃣ OpenAI </br>
+2️⃣ Serp API </br>
+3️⃣ Anthropic </br>
+4️⃣ Tavily Search </br>
+5️⃣ LangChain </br>
+6️⃣ Hugging Face </br>
+apply for 1️⃣ to 3️⃣ first. With these APIs you can use most of the tools in the package. But it is good to obtain all APIs at some point. </br>
+
 
