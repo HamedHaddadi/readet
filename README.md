@@ -62,7 +62,7 @@ ANTHROPIC_API_KEY ="<your key>" </br>
 
 
 __quick example usage__ </br>
-_summarizers_ </br>
+📖 _summarizers_ </br>
 I use the _PlainSummarizer_ as an example: </br>
 First, import necessary functions and classes </br> 
 ```python
@@ -95,8 +95,16 @@ pdf_file = path.join('../files/my_file.pdf')
 response = plain_summarizer(pdf_file)
 ```
 </br>
-You can run the callable as much as you want to different pdf files.  
+You can run the callable as much as you want to many pdf files: </br>
 
+```python
+pdf_files = ['./my_papers/paper.pdf', './my_patents/patent.pdf']
+responses = {}
+for count,pdf in enumerate(pdf_files):
+    responses[f'summary_{count}'] = plain_summarizer(pdf)
+```
+</br>
+Note that ingesting pdf files may take some time. For a general scientific paper it may take about 12 seconds. Later when I explain RAGs, I will describe a method to store ingested pdf files to avoid spending too much time reading pdf files from scratch. </br>
 
 
 
