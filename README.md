@@ -1,4 +1,7 @@
 # readet
+🚧 _until I prepare a more comprehensive documentation, use this readme to work with package_ </br>
+⚠️ If you run this package on a Windows machine, make sure you define the paths to files accordingly. </br>
+
 readet is a package developed using _LangChain_ for perusing scientific and technical literature. But all tools are applicable to any context. </br>
 Eventhough several functionalities are included in this package, such as multi-agent systems, these modules are used more frequently: </br>
 ➡️ summarizers that are used to summarize a text, mostly pdf files. </br>
@@ -27,7 +30,6 @@ readet
 └── utils
     ├── __init__.py
     ├── docs.py
-    ├── image.py
     ├── models.py
     ├── prompts.py
     ├── save_load.py
@@ -61,7 +63,7 @@ SERP_API_KEY="<your key>" </br>
 ANTHROPIC_API_KEY ="<your key>" </br> 
 
 
-__quick example usage__ </br>
+__quick example usage 1__ </br>
 📖 _summarizers_ </br>
 I use the _PlainSummarizer_ as an example: </br>
 First, import necessary functions and classes </br> 
@@ -69,7 +71,6 @@ First, import necessary functions and classes </br>
 # to define paths
 from os import path
 # for pretty prints of the summary
-from pprint import pprint
 
 from readet.utils.io import load_keys
 from readet.core.summarizers import PlainSummarizers
@@ -95,7 +96,8 @@ pdf_file = path.join('../files/my_file.pdf')
 response = plain_summarizer(pdf_file)
 ```
 </br>
-You can run the callable as much as you want to many pdf files: </br>
+You can print the response to see the summary </br>
+Also, You may run the callable as much as you want to many pdf files: </br>
 
 ```python
 pdf_files = ['./my_papers/paper.pdf', './my_patents/patent.pdf']
@@ -105,6 +107,27 @@ for count,pdf in enumerate(pdf_files):
 ```
 </br>
 Note that ingesting pdf files may take some time. For a general scientific paper it may take about 12 seconds. Later when I explain RAGs, I will describe a method to store ingested pdf files to avoid spending too much time reading pdf files from scratch. </br>
+
+__quick example usage 2__
+📑 _RAGS_ </br>
+RAGS are used to ask questions about a document. Say you have a pdf file and you want to ask questions about the content without reading it. RAGS ingest the pdf file and store in a database (a vectorstore) and use LLMs to respond to your questions based on what they hold. All RAGs in this package can keep their database on your local computer. So you do not need to add pdf files from scratch all the time. </br>
+readet contains several RAGs but working with all of them is the same. I start with the _PlainRAG_ which is the simplest model: </br>
+```python
+from readet.utils.io import load_keys
+load_keys('./keys.env')
+from readet.core.rags import PlainRAG
+```
+</br>
+You can define a RAG from scratch, or initialize it from saved data. I start from the former case </br>
+
+```python
+pdf_file = './my_papers/fluidflow.pdf'
+# define your RAG store path here
+store_path = './myRAGS'
+
+```
+
+
 
 
 
