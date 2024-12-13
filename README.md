@@ -162,7 +162,7 @@ rag2("what is the relationship between inertia and viscosity?")
 ```
 </br>
 
-Let's use _RAGWithCitations_ as well </br>:
+Let's use _RAGWithCitations_ as well: </br>
 
 ```python
 from readet.utils.io import load_keys
