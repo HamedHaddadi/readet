@@ -160,6 +160,26 @@ Now you can ask questions. </br>
 ```python
 rag2("what is the relationship between inertia and viscosity?")
 ```
+</br>
+
+Let's use _RAGWithCitations_ as well </br>:
+
+```python
+from readet.utils.io import load_keys
+load_keys('./keys.env')
+from readet.core.rags import RAGWithCitations
+pdf_file = './files/HaddadiMorrisJFM2014.pdf'
+store_path = './RAGStore'
+rag = RAGWithCitations(pdf_file, store_path = store_path)
+rag("what is the relationship between inertia and normal stress?")
+```
+</br>
+And here is the answer: 
+
+```console
+'Inertia affects the normal stress in suspensions by influencing the distribution of particles and their interactions under shear flow. As inertia increases, it can lead to higher particle pressure and changes in the normal stress differences, particularly the first normal stress difference (N1), which becomes more negative with increasing inertia and volume fraction. This relationship highlights the complex interplay between inertia and stress in particle-laden fluids, where increased inertia amplifies the effects of excluded volume and alters the stress distribution within the suspension.',
+ 'Haddadi, H. & Morris, J. F. (2023). Microstructure and Rheology of Finite Inertia Suspensions. J. Fluid Mech.'
+```
 
 
 
