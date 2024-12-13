@@ -14,25 +14,25 @@ here is the current directory tree of the package </br>
 readet
 ├── __init__.py
 ├── bots
-│   ├── __init__.py
-│   ├── agents.py
-│   ├── chat_tools.py
-│   ├── components.py
-│   ├── multi_agents.py
-│   └── prebuilt.py
+│   ├── __init__.py
+│   ├── agents.py
+│   ├── chat_tools.py
+│   ├── components.py
+│   ├── multi_agents.py
+│   └── prebuilt.py
 ├── core
-│   ├── __init__.py
-│   ├── chains.py
-│   ├── knowledge_graphs.py
-│   ├── rags.py
-│   ├── retrievers.py
-│   ├── summarizers.py
-│   └── tools.py
+│   ├── __init__.py
+│   ├── chains.py
+│   ├── knowledge_graphs.py
+│   ├── rags.py
+│   ├── retrievers.py
+│   ├── summarizers.py
+│   └── tools.py
 └── utils
     ├── __init__.py
     ├── docs.py
+    ├── io.py
     ├── models.py
-    ├── prompts.py
     ├── save_load.py
     └── schemas.py
 ```
