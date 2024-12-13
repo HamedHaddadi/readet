@@ -215,9 +215,34 @@ This tool has been a real convenience for me and I hope it helps you as well. I 
 ```console
 from readet.utils.io import load_keys
 load_keys('keys.env')
-
-
+from readet.bots.prebuilt import Download
 ```
+</br>
+Now you can define the parameters. These parameters are a path to save the downloaded files and maximum number of papers to download. Note that if you connection to the download faces a publisher paywall, the pdf file is not downloaded. But you can use the list of papers that are found to identify those papers and ask some to download it for you. </br>
+
+``` python
+save_path = './pdfs'
+max_results = 100
+downloader = Download(save_path = save_path, max_results = max_results)
+
+# NOTE: if you want to download the paper, explicitly mention the word 'download'
+download("search and download all papers related to finite inertia suspension flow of ellipsoidal particles")
+```
+The downloaded files are stored in _save_path_. A '.txt' file containing information of the papers is also stored in the _save_path_ directory </br>
+For example, the first record in this file is : </br>
+
+```console
+*******************
+Title: Numerical study of filament suspensions at finite inertia
+Authors: AA Banaei, ME Rosti, L Brandt
+Citation Count: 36
+PDF Link: https://www.cambridge.org/core/services/aop-cambridge-core/content/view/5FA754F237DC68A6721F7C055FA08CEC/S0022112019007948a.pdf/div-class-title-numerical-study-of-filament-suspensions-at-finite-inertia-div.pdf
+```
+for example, you can send this file to colleagues via email. </br>
+
+
+
+
 
 
 
