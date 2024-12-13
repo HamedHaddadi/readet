@@ -111,6 +111,7 @@ Note that ingesting pdf files may take some time. For a general scientific paper
 
 👉 __quick example usage 2__ </br>
 📑 _RAGS_ </br>
+
 RAGS are used to ask questions about a document. Say you have a pdf file and you want to ask questions about the content without reading it. RAGS ingest the pdf file and store in a database (a vectorstore) and use LLMs to respond to your questions based on what they hold. All RAGs in this package can keep their database on your local computer. So you do not need to add pdf files from scratch all the time. </br>
 readet contains several RAGs but working with all of them is the same. Here is a list </br>
 1️⃣ _PlainRAG_: simple but useful RAG to ask questions about a pdf file </br>
@@ -180,6 +181,12 @@ And here is the answer:
 'Inertia affects the normal stress in suspensions by influencing the distribution of particles and their interactions under shear flow. As inertia increases, it can lead to higher particle pressure and changes in the normal stress differences, particularly the first normal stress difference (N1), which becomes more negative with increasing inertia and volume fraction. This relationship highlights the complex interplay between inertia and stress in particle-laden fluids, where increased inertia amplifies the effects of excluded volume and alters the stress distribution within the suspension.',
  'Haddadi, H. & Morris, J. F. (2023). Microstructure and Rheology of Finite Inertia Suspensions. J. Fluid Mech.'
 ```
+</br>
+
+_I use one more example of the AdaptiveRAG and move on to the next example usage_ </br>
+
+
+
 
 
 
