@@ -125,7 +125,7 @@ You can define a RAG from scratch, or initialize it from saved data. I start fro
 pdf_file = './my_papers/fluidflow.pdf'
 # define your RAG store path here
 store_path = './myRAGS'
-rag = PlainRAG(pdf_file, store_path = store_path)
+rag = PlainRAG(documents = pdf_file, store_path = store_path)
 ```
 </br>
 This will give you a function for asking questions: </br>
@@ -135,6 +135,24 @@ rag("who are the authors of this work?")
 rag("what is the relationship between fluid pressure and solid content?")
 ```
 </br>
+Let's start the RAG from the previously saved database (or "vector store"). This will allow you to add new pdf files, or keep asking question from the old files. </br>
+here are parameters that you need to pass to the class: </br>
+
+``` python
+# this parameter can also be None, if you do not want to add any new pdf file
+new_pdf_file = './my_papers/turbulence.pdf'
+# directory path
+store_path = './myRAGS'
+# either use a version number, ex 0,1,.., or pass 'last'
+load_version_number = 'last'
+rag2 = PlainRAG(documents = new_pdf_file, store_path = store_path, load_version_number = load_version_number)
+```
+</br>
+Now you can ask questions. </br>
+
+```python
+rag2("what is the relationship between inertia and viscosity?")
+```
 
 
 
