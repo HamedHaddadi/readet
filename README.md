@@ -41,6 +41,13 @@ I recommend setting up a virtual environment with python version 3.10 </br>
 ```console
 conda create -n <name> python=3.10
 ```
+</br>
+Then you can activate the environment using </br>
+
+```console
+conda activate <name>
+```
+</br>
 This will make sure the package dependencies remain inside the virtual environment. 
 The package can be installed using 
 ```console
@@ -64,16 +71,14 @@ SERP_API_KEY="<your key>" </br>
 ANTHROPIC_API_KEY ="<your key>" </br> 
 
 
-👉 __quick example usage 1__ </br>
+👉 __example use case 1__ </br>
 📖 _summarizers_ </br>
 I use the _PlainSummarizer_ as an example: </br>
 First, import necessary functions and classes </br> 
 ```python
-# to define paths
-from os import path
-# for pretty prints of the summary
-
+# use this function to load your API keys from keys.env file
 from readet.utils.io import load_keys
+load_keys('keys.env')
 from readet.core.summarizers import PlainSummarizers
 ```
 </br>
@@ -93,7 +98,7 @@ Now specify the path to your pdf file and run the summarizer: </br>
 
 ```python
 # note that your path might be different. In Windows, MacOS or Linux. Choose the exact path
-pdf_file = path.join('../files/my_file.pdf')
+pdf_file = '../files/my_file.pdf'
 response = plain_summarizer(pdf_file)
 ```
 </br>
@@ -109,7 +114,7 @@ for count,pdf in enumerate(pdf_files):
 </br>
 Note that ingesting pdf files may take some time. For a general scientific paper it may take about 12 seconds. Later when I explain RAGs, I will describe a method to store ingested pdf files to avoid spending too much time reading pdf files from scratch. </br>
 
-👉 __quick example usage 2__ </br>
+👉 __example use case 2__ </br>
 📑 _RAGS_ </br>
 
 RAGS are used to ask questions about a document. Say you have a pdf file and you want to ask questions about the content without reading it. RAGS ingest the pdf file and store in a database (a vectorstore) and use LLMs to respond to your questions based on what they hold. All RAGs in this package can keep their database on your local computer. So you do not need to add pdf files from scratch all the time. </br>
@@ -123,7 +128,7 @@ readet contains several RAGs but working with all of them is the same. Here is a
 I start with the _PlainRAG_ which is the simplest model: </br>
 ```python
 from readet.utils.io import load_keys
-load_keys('./keys.env')
+load_keys('keys.env')
 from readet.core.rags import PlainRAG
 ```
 </br>
@@ -167,7 +172,7 @@ Let's use _RAGWithCitations_ as well: </br>
 
 ```python
 from readet.utils.io import load_keys
-load_keys('./keys.env')
+load_keys('keys.env')
 from readet.core.rags import RAGWithCitations
 pdf_file = './files/HaddadiMorrisJFM2014.pdf'
 store_path = './RAGStore'
@@ -183,7 +188,77 @@ And here is the answer:
 ```
 </br>
 
-_I use one more example of the AdaptiveRAG and move on to the next example usage_ </br>
+_I use one more example of the AdaptiveRAG and move on to the next example usage. All other RAGs mentioned above work the same_ </br>
+
+```python
+from readet.core.rags import AdaptiveRAG
+from readet.utils.io import load_keys
+load_keys('keys.env')
+
+# can be None if you want to load from database
+pdf_file = './files/fluidflow.pdf'
+store_path = './RAGFluid'
+# if you want to load from database, choose a verion number or 'last'; else None
+load_version_number = None
+
+rag = AdaptiveRAG(documents = None, store_path = store_path, load_version_number = 'last')
+rag("what is relationship between Reynolds number and viscosity?")
+
+```
+</br>
+And here is the answer: </br>
+
+```console
+The Reynolds number (Re) is a dimensionless quantity that characterizes the flow regime in fluid dynamics, influenced by factors such as velocity, characteristic length, and viscosity. Generally, as Re increases, the effects of inertia become more significant compared to viscous forces, which can lead to changes in flow behavior. However, the viscosity itself may not show significant changes with varying Re, as indicated in the context provided.
+
+```
+
+👉 __example use case 3__</br>
+📚 _search and download several papers from Google Scholar and Arxiv_ </br>
+This tool has been a real convenience for me and I hope it helps you as well. I explain how it works. But I included this tool as an agent in a _multi agent_ chat bot and I deploy that chatbot soon. You can use this tool, summary and RAGs to peruse a lot papers. </br>
+⚠️To use the Download functionality , you need _OpenAI_ and _Serp API_ API keys. Use the links in the first part of this ReadMe document to obtain the API keys. </br>
+⚠️ ⚠️ To use this agent, prompting is important. Make sure to mention _"search and download"_ if you want the agent to download the files for you. Otherwise, it will output a list of papers and their information and links to download the article. </br>
+
+```console
+from readet.utils.io import load_keys
+load_keys('keys.env')
+from readet.bots.prebuilt import Download
+```
+</br>
+Now you can define the parameters. These parameters are a path to save the downloaded files and maximum number of papers to download. Note that if you connection to the download faces a publisher paywall, the pdf file is not downloaded. But you can use the list of papers that are found to identify those papers and ask some to download it for you. </br>
+
+``` python
+save_path = './pdfs'
+max_results = 100
+downloader = Download(save_path = save_path, max_results = max_results)
+
+# NOTE: if you want to download the paper, explicitly mention the word 'download'
+download("search and download all papers related to finite inertia suspension flow of ellipsoidal particles")
+```
+The downloaded files are stored in _save_path_. A '.txt' file containing information of the papers is also stored in the _save_path_ directory </br>
+For example, the first record in this file is : </br>
+
+```console
+*******************
+Title: Numerical study of filament suspensions at finite inertia
+Authors: AA Banaei, ME Rosti, L Brandt
+Citation Count: 36
+PDF Link: https://www.cambridge.org/core/services/aop-cambridge-core/content/view/5FA754F237DC68A6721F7C055FA08CEC/S0022112019007948a.pdf/div-class-title-numerical-study-of-filament-suspensions-at-finite-inertia-div.pdf
+```
+for example, you can send this file to colleagues via email. </br>
+
+I am continuosly adding more functionalities. Hope this package is useful for your scientific discovery 🤞
+
+
+
+
+
+
+
+
+
+
+
 
 
 
