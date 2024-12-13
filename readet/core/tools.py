@@ -15,9 +15,20 @@ from langchain_core.prompts import PromptTemplate
 from typing import Literal, Optional, Any, Dict, Union, List, Sequence
 from urllib.request import urlretrieve  
 from . summarizers import SUMMARIZERS
-from . rags import RAGS, PlainRAG  
-from .. utils import models, prompts, docs 
+from . rags import PlainRAG  
+from .. utils import models, docs 
 from . chains import TitleExtractor
+
+# ########################################### #
+# prompts 
+# ########################################### #
+# ### Keyword extraction from documents ### #
+EXTRACT_KEYWORDS_PROMPT = """
+    you will be provided with a text. try to find keywords in this text. Avoid including name of the assignee, 
+        corporation, or the name of authors or people. Extract keywords that are technically relevant
+{text}	
+"""
+
 
 # ## Google Scholar Search Tool ## #
 # API Wrapper
@@ -398,7 +409,7 @@ class ExtractKeywords(BaseModel):
 	def generate_runnable_chain(cls, values: Dict) -> Dict:
 		chat_model = values.get('chat_model', 'openai-gpt-4o-mini')
 		llm = models.configure_chat_model(model = chat_model, temperature = 0)
-		template = prompts.TEMPLATES["extract-keywords"]
+		template = EXTRACT_KEYWORDS_PROMPT
 		prompt = PromptTemplate.from_template(template)
 		values['runnable'] = (prompt | llm.with_structured_output(Keywords))
 		return values 

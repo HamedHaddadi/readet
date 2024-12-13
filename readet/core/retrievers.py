@@ -317,54 +317,50 @@ class ParentDocument(Retriever):
 # ######################################### #
 # 	Retriever Factory						#
 # ######################################### #
-
-def get_retriever(documents: List[Document] | List[str] | str,
-				   retriever_type: Literal['plain', 'contextual-compression', 'parent-document'], 
-					**kwargs) -> Retriever:
+def get_retriever(documents: List[Document] | List[str] | str | None,
+			retriever_type: Literal['plain', 'contextual-compression', 'parent-document'] ='parent-document', **kwargs) -> Retriever:
 	
-	if retriever_type == 'plain':
-		if not all(isinstance(doc, Document) for doc in documents) and (all(isinstance(doc, str) for doc in documents) or isinstance(documents, str)):
-			retriever = PlainRetriever.from_pdf(documents, 
-									   	embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'),
-												document_loader = kwargs.get('document_loader', 'pypdf'),
-														splitter = kwargs.get('splitter', 'recursive'))																								
-		else:
-			retriever = PlainRetriever(documents, embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'))
-		
-		retriever.build(search_type = kwargs.get('search_type', 'similarity'),
-										k = kwargs.get('k', 5), lambda_mult = kwargs.get('lambda_mult', 0.5),
-											fetch_k = kwargs.get('fetch_k', 20))
-		return retriever 
-	
-	elif retriever_type == 'parent-document':
-		if not all(isinstance(doc, Document) for doc in documents) and (all(isinstance(doc, str) for doc in documents) or isinstance(documents, str)):
-			load_version_number = kwargs.get('load_version_number', None)
-			if isinstance(load_version_number, (str, int)):
-				retriever = ParentDocument.load_from_disk(kwargs.get('store_path'), pdf_files = documents,
+	load_version_number = kwargs.get('load_version_number', None)
+	if load_version_number is not None and isinstance(load_version_number, (str, int)) and (isinstance(documents, (str, list)) or documents is None):
+		if retriever_type == 'parent-document':
+			retriever = ParentDocument.load_from_disk(kwargs.get('store_path'), pdf_files = documents,
 				version_number = load_version_number, embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'),
 					document_loader = kwargs.get('document_loader', 'pypdf'), parent_splitter = kwargs.get('parent_splitter', 'token'),
 						child_splitter = kwargs.get('child_splitter', 'recursive'), parent_chunk_size = kwargs.get('parent_chunk_size', 2000), 
 							child_chunk_size = kwargs.get('child_chunk_size', 2000), parent_chunk_overlap = kwargs.get('parent_chunk_overlap', 200),
 								child_chunk_overlap = kwargs.get('child_chunk_overlap', 100))
-			else:
-				retriever = ParentDocument.from_pdf(documents, store_path = kwargs.get('store_path'),
-					embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'),
-					document_loader = kwargs.get('document_loader', 'pypdf'), parent_splitter = kwargs.get('parent_splitter', 'token'),
-					child_splitter = kwargs.get('child_splitter', 'recursive'), parent_chunk_size = kwargs.get('parent_chunk_size', 2000), 
-						child_chunk_size = kwargs.get('child_chunk_size', 2000), parent_chunk_overlap = kwargs.get('parent_chunk_overlap', 200),
-								child_chunk_overlap = kwargs.get('child_chunk_overlap', 100))																										
 		else:
+			raise ValueError(f"Invalid retriever type: {retriever_type}; choose 'patent-document'")
+
+	elif load_version_number is None and isinstance(documents, (list, str)):
+		if retriever_type == 'parent-document':
+			retriever = ParentDocument.from_pdf(documents, store_path = kwargs.get('store_path'),
+				embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'),
+					document_loader = kwargs.get('document_loader', 'pypdf'), parent_splitter = kwargs.get('parent_splitter', 'token'),
+						child_splitter = kwargs.get('child_splitter', 'recursive'), parent_chunk_size = kwargs.get('parent_chunk_size', 2000), 
+							child_chunk_size = kwargs.get('child_chunk_size', 2000), parent_chunk_overlap = kwargs.get('parent_chunk_overlap', 200),
+								child_chunk_overlap = kwargs.get('child_chunk_overlap', 100))
+		elif retriever_type == 'plain':
+			retriever = PlainRetriever.from_pdf(documents, embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'),
+				document_loader = kwargs.get('document_loader', 'pypdf'), splitter = kwargs.get('splitter', 'recursive'))
+		else:
+			raise ValueError(f"Invalid retriever type: {retriever_type}; choose 'patent-document' or 'plain'")
+
+	elif all(isinstance(doc, Document) for doc in documents) and load_version_number is None:
+		if retriever_type == 'plain':
+			retriever = PlainRetriever(documents, embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'))
+		
+		elif retriever_type == 'parent-document':
 			retriever = ParentDocument(documents, embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'),
-				store = kwargs.get('store', None), store_path = kwargs.get('store_path', None),
+				store = kwargs.get('store', None), store_path = kwargs.get('store_path', None), 
 					parent_splitter = kwargs.get('parent_splitter', 'token'), child_splitter = kwargs.get('child_splitter', 'recursive'),
 						parent_chunk_size = kwargs.get('parent_chunk_size', 2000), parent_chunk_overlap = kwargs.get('parent_chunk_overlap', 200),
 							child_chunk_size = kwargs.get('child_chunk_size', 2000), child_chunk_overlap = kwargs.get('child_chunk_overlap', 100))
 		
-		retriever.build()
-		return retriever 
-	
-	elif retriever_type == 'contextual-compression':
-		raise NotImplementedError("Contextual Compression Retriever is not yet implemented")
-	
+		elif retriever_type == 'contextual-compression':
+			raise NotImplementedError("Contextual Compression Retriever is not yet implemented")
 	else:
-		raise ValueError(f"Invalid retriever type: {retriever_type}")
+		raise ValueError(f"Invalid document type or version number")
+
+	retriever.build()
+	return retriever 

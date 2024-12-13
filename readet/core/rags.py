@@ -5,7 +5,6 @@ from typing import (Optional, Dict, List,Union, Any, TypedDict, Annotated, Seque
 from langchain_core.documents import Document 
 from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate
-from langchain_core.runnables.base import RunnableSequence 
 from langchain_core.runnables import RunnablePassthrough 
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.output_parsers import StrOutputParser 
@@ -17,13 +16,12 @@ from langgraph.graph.message import add_messages
 from pprint import pprint 
 from collections.abc import Callable
 from . retrievers import get_retriever, Retriever 
-from .. utils import prompts, models
-from .. utils.schemas import SCHEMAS 
+from .. utils import models
 
 AVAILABLE_RETRIEVERS = ['parent-document', 'plain']
 
 # ################################### #
-# Plain RAG  						  #
+# Prompts    						  #
 # ################################### #
 PLAIN_RAG_PROMPT = """
 	You are an assistant for question-answering tasks. 
@@ -34,6 +32,38 @@ PLAIN_RAG_PROMPT = """
 	Context: {context} 
 	Answer:
 """
+RETRIEVAL_GRADER_PROMPT = """
+You are a grader assessing relevance of a retrieved answer to a user question. \n 
+    It does not need to be a stringent test. The goal is to filter out erroneous retrievals. \n
+    	If the answer contains keyword(s) or semantic meaning related to the user question, grade it as relevant. \n
+    	Give a binary score 'yes' or 'no' score to indicate whether the answer is relevant to the question.
+"""
+HALLUCINATION_GRADER_PROMPT = """
+		You are a grader assessing whether an LLM generation is grounded in / supported by a set of retrieved facts. \n 
+     Give a binary score 'yes' or 'no'. 'Yes' means that the answer is grounded in / supported by the set of facts.
+			"""
+
+ANSWER_GRADER_PROMPT = """
+		You are a grader assessing whether an answer addresses / resolves a question \n 
+     		Give a binary score 'yes' or 'no'. Yes' means that the answer resolves the question.	
+"""
+
+QUESTION_REWRITER_PROMPT = """
+		You a question re-writer that converts an input question to a better version that is optimized \n 
+     		for vectorstore retrieval. Look at the input and try to reason about the underlying semantic intent / meaning.	
+"""
+
+RELEVANCE_GRADER_PROMPT = """
+        You are a grader assessing relevance of a retrieved document to a user question. \n 
+        Here is the retrieved document: \n\n {context} \n\n
+        Here is the user question: {question} \n
+        If the document contains keyword(s) or semantic meaning related to the user question, grade it as relevant. \n
+        Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question.	
+"""
+
+# ################################### #
+# Plain RAG  						  #
+# ################################### #
 class PlainRAG(Callable):
 	"""
 	Plain RAG class; 
@@ -186,27 +216,6 @@ class RAGWithCitations(PlainRAG):
 		return self.run(query, parse)
 	
 
-# #################################### #
-# 	Structured Outputs				   #
-# Extracts information from text into  # 
-# 			Schemas					   #	
-# #################################### #
-DEFAULT_PROMPT = """You are an expert extraction algorithm. 
-     Only extract relevant information from the text. 
-        If you do not find the attribute you are asked to extract, 
-            return null."""	
-
-# plain extactor chain
-def extract_schema_plain(schemas: Union[List[str], str], 
-				chat_model:str = 'openai-gpt-4o-mini', 
-			 			temperature: int = 0) -> Union[Dict[str, RunnableSequence], RunnableSequence]:
-	prompt = ChatPromptTemplate.from_messages([("system", DEFAULT_PROMPT), ("human", "{text}")])
-	llm = models.configure_chat_model(chat_model, temperature = temperature)
-	if isinstance(schemas, list):
-		return {schema: (prompt | llm.with_structured_output(schema = SCHEMAS[schema])) for schema in schemas}
-	elif isinstance(schemas, str):
-		return (prompt | llm.with_structured_output(schema = SCHEMAS[schemas]))
-
 
 # ####################### #
 # Self-RAG 				  #
@@ -303,7 +312,7 @@ class SelfRAG:
 	def _configure_grader(self) -> None:
 		llm = models.configure_chat_model(self.chat_model, temperature = 0)
 		struct_llm_grader = llm.with_structured_output(GradeRetrieval)
-		system = prompts.TEMPLATES['self-rag']['retrieval-grader']
+		system = RETRIEVAL_GRADER_PROMPT
 		grade_prompt = ChatPromptTemplate.from_messages(
 			[
 				("system", system), 
@@ -314,14 +323,14 @@ class SelfRAG:
 	
 	def _configure_rag_chain(self) -> None:
 		llm = models.configure_chat_model(self.chat_model, temperature = 0)
-		template = prompts.TEMPLATES['self-rag']['rag']
+		template = PLAIN_RAG_PROMPT
 		prompt = ChatPromptTemplate.from_template(template)
 		self.rag_chain = prompt | llm | StrOutputParser()
 	
 	def _configure_hallucination_grader(self) -> None:
 		llm = models.configure_chat_model(self.chat_model, temperature = 0)
 		struct_llm_grader = llm.with_structured_output(GradeHallucinations)
-		system  = prompts.TEMPLATES['self-rag']['hallucination-grader']
+		system  = HALLUCINATION_GRADER_PROMPT
 		hallucination_prompt = ChatPromptTemplate.from_messages(
 			[
 				("system", system), 
@@ -332,7 +341,7 @@ class SelfRAG:
 	def _configure_answer_grader(self) -> None:
 		llm = models.configure_chat_model(self.chat_model, temperature = 0)
 		struct_llm_grader = llm.with_structured_output(GraderAnswer)
-		system = prompts.TEMPLATES['self-rag']['answer-grader']
+		system = ANSWER_GRADER_PROMPT
 		answer_prompt = ChatPromptTemplate.from_messages(
 			[
 				("system", system), 
@@ -343,7 +352,7 @@ class SelfRAG:
 	
 	def _configure_question_rewriter(self) -> None:
 		llm = models.configure_chat_model(self.chat_model, temperature = 0)
-		system = prompts.TEMPLATES['self-rag']['question-rewriter']
+		system = QUESTION_REWRITER_PROMPT
 		rewrite_prompt = ChatPromptTemplate.from_messages(
 			[
 				("system", system), 
@@ -590,12 +599,12 @@ class AgenticRAG:
 	def _configure_relevance_check_chain(self) -> None:
 		llm = models.configure_chat_model(self.chat_model, temperature = 0, streaming = True)
 		model_with_struct = llm.with_structured_output(RelevanceGrader)
-		template = prompts.TEMPLATES['agentic-rag']['relevance-grader']
+		template = RELEVANCE_GRADER_PROMPT
 		prompt = PromptTemplate.from_template(template)
 		self.relevance_chain = (prompt | model_with_struct)
 	
 	def _configure_generate_chain(self) -> None:
-		template = prompts.TEMPLATES["rag"]
+		template = PLAIN_RAG_PROMPT
 		prompt = PromptTemplate.from_template(template)
 		llm = models.configure_chat_model(self.chat_model, temperature = 0, streaming = True)
 		self.generate_chain = prompt | llm | StrOutputParser()
@@ -1101,30 +1110,15 @@ class AdaptiveRAG:
 		else:
 			return self._run(query)
 	
+	def __call__(self, query: str, stream: bool = False) -> str:
+		return self.run(query, stream)
+	
 	def add_pdf(self, pdf_file: str) -> None:
 		self.configured = False 
 		self.retriever.add_pdf(pdf_file)
 		self.build()
 	
 
-
-
-
-
-		
-		
-		
-
-
-
-
-
-
-# ##################################### #
-RAGS = {'self-single-pdf': SelfRAG, 
-				'agentic-rag-pdf': AgenticRAG}
-
-EXTRACTORS = {'plain': extract_schema_plain}
 
 
 
