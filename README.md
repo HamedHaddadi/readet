@@ -112,7 +112,14 @@ Note that ingesting pdf files may take some time. For a general scientific paper
 👉 __quick example usage 2__ </br>
 📑 _RAGS_ </br>
 RAGS are used to ask questions about a document. Say you have a pdf file and you want to ask questions about the content without reading it. RAGS ingest the pdf file and store in a database (a vectorstore) and use LLMs to respond to your questions based on what they hold. All RAGs in this package can keep their database on your local computer. So you do not need to add pdf files from scratch all the time. </br>
-readet contains several RAGs but working with all of them is the same. I start with the _PlainRAG_ which is the simplest model: </br>
+readet contains several RAGs but working with all of them is the same. Here is a list </br>
+1️⃣ _PlainRAG_: simple but useful RAG to ask questions about a pdf file </br>
+2️⃣ _RAGWithCitations_: similar to plainRAG, but returns the reference as well (see an example below) </br>
+3️⃣ _AgenticRAG_: RAG with extra checks to make sure the answer is relevant to the context of the document </br>
+4️⃣ _SelfRAG_: RAG with introspection, to avoid hallucination </br>
+5️⃣ _AdaptiveRAG_: RAG that screens the question based on the relevance to the document. If not relevant, it gives an answer by google search. For example, it does not allow you to answer question about salsa dancing from a fluid dynamics text </br>
+
+I start with the _PlainRAG_ which is the simplest model: </br>
 ```python
 from readet.utils.io import load_keys
 load_keys('./keys.env')
