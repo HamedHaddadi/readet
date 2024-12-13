@@ -240,6 +240,8 @@ PDF Link: https://www.cambridge.org/core/services/aop-cambridge-core/content/vie
 ```
 for example, you can send this file to colleagues via email. </br>
 
+I am continuosly adding more functionalities. Hope this package is useful for your scientific discovery 🤞
+
 
 
 
