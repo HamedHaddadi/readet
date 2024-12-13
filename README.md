@@ -129,6 +129,7 @@ rag = PlainRAG(pdf_file, store_path = store_path)
 ```
 </br>
 This will give you a function for asking questions </br>:
+
 ```python
 rag("who are the authors of this work?")
 rag(""what is the relationship between fluid pressure and solid content?")
