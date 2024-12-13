@@ -64,7 +64,7 @@ SERP_API_KEY="<your key>" </br>
 ANTHROPIC_API_KEY ="<your key>" </br> 
 
 
-👉 __quick example usage 1__ </br>
+👉 __example use case 1__ </br>
 📖 _summarizers_ </br>
 I use the _PlainSummarizer_ as an example: </br>
 First, import necessary functions and classes </br> 
@@ -72,7 +72,6 @@ First, import necessary functions and classes </br>
 # use this function to load your API keys from keys.env file
 from readet.utils.io import load_keys
 load_keys('keys.env')
-
 from readet.core.summarizers import PlainSummarizers
 ```
 </br>
@@ -92,7 +91,7 @@ Now specify the path to your pdf file and run the summarizer: </br>
 
 ```python
 # note that your path might be different. In Windows, MacOS or Linux. Choose the exact path
-pdf_file = path.join('../files/my_file.pdf')
+pdf_file = '../files/my_file.pdf'
 response = plain_summarizer(pdf_file)
 ```
 </br>
@@ -108,7 +107,7 @@ for count,pdf in enumerate(pdf_files):
 </br>
 Note that ingesting pdf files may take some time. For a general scientific paper it may take about 12 seconds. Later when I explain RAGs, I will describe a method to store ingested pdf files to avoid spending too much time reading pdf files from scratch. </br>
 
-👉 __quick example usage 2__ </br>
+👉 __example use case 2__ </br>
 📑 _RAGS_ </br>
 
 RAGS are used to ask questions about a document. Say you have a pdf file and you want to ask questions about the content without reading it. RAGS ingest the pdf file and store in a database (a vectorstore) and use LLMs to respond to your questions based on what they hold. All RAGs in this package can keep their database on your local computer. So you do not need to add pdf files from scratch all the time. </br>
@@ -189,8 +188,41 @@ from readet.core.rags import AdaptiveRAG
 from readet.utils.io import load_keys
 load_keys('keys.env')
 
+# can be None if you want to load from database
+pdf_file = './files/fluidflow.pdf'
+store_path = './RAGFluid'
+# if you want to load from database, choose a verion number or 'last'; else None
+load_version_number = None
+
+rag = AdaptiveRAG(documents = None, store_path = store_path, load_version_number = 'last')
+rag("what is relationship between Reynolds number and viscosity?")
 
 ```
+</br>
+And here is the answer: </br>
+
+```console
+The Reynolds number (Re) is a dimensionless quantity that characterizes the flow regime in fluid dynamics, influenced by factors such as velocity, characteristic length, and viscosity. Generally, as Re increases, the effects of inertia become more significant compared to viscous forces, which can lead to changes in flow behavior. However, the viscosity itself may not show significant changes with varying Re, as indicated in the context provided.
+
+```
+
+👉 __example use case 3__</br>
+📚 _search and download several papers from Google Scholar and Arxiv_ </br>
+This tool has been a real convenience for me and I hope it helps you as well. I explain how it works. But I included this tool as an agent in a _multi agent_ chat bot and I deploy that chatbot soon. You can use this tool, summary and RAGs to peruse a lot papers. </br>
+⚠️To use the Download functionality , you need _OpenAI_ and _Serp API_ API keys. Use the links in the first part of this ReadMe document to obtain the API keys. </br>
+⚠️ ⚠️ To use this agent, prompting is important. Make sure to mention _"search and download"_ if you want the agent to download the files for you. Otherwise, it will output a list of papers and their information and links to download the article. </br>
+
+```console
+from readet.utils.io import load_keys
+load_keys('keys.env')
+
+
+```
+
+
+
+
+
 
 
 
