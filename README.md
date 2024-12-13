@@ -69,11 +69,10 @@ ANTHROPIC_API_KEY ="<your key>" </br>
 I use the _PlainSummarizer_ as an example: </br>
 First, import necessary functions and classes </br> 
 ```python
-# to define paths
-from os import path
-# for pretty prints of the summary
-
+# use this function to load your API keys from keys.env file
 from readet.utils.io import load_keys
+load_keys('keys.env')
+
 from readet.core.summarizers import PlainSummarizers
 ```
 </br>
@@ -123,7 +122,7 @@ readet contains several RAGs but working with all of them is the same. Here is a
 I start with the _PlainRAG_ which is the simplest model: </br>
 ```python
 from readet.utils.io import load_keys
-load_keys('./keys.env')
+load_keys('keys.env')
 from readet.core.rags import PlainRAG
 ```
 </br>
@@ -167,7 +166,7 @@ Let's use _RAGWithCitations_ as well: </br>
 
 ```python
 from readet.utils.io import load_keys
-load_keys('./keys.env')
+load_keys('keys.env')
 from readet.core.rags import RAGWithCitations
 pdf_file = './files/HaddadiMorrisJFM2014.pdf'
 store_path = './RAGStore'
@@ -183,7 +182,17 @@ And here is the answer:
 ```
 </br>
 
-_I use one more example of the AdaptiveRAG and move on to the next example usage_ </br>
+_I use one more example of the AdaptiveRAG and move on to the next example usage. All other RAGs mentioned above work the same_ </br>
+
+```python
+from readet.core.rags import AdaptiveRAG
+from readet.utils.io import load_keys
+load_keys('keys.env')
+
+
+```
+
+
 
 
 
