@@ -36,7 +36,7 @@ readet
     ├── save_load.py
     └── schemas.py
 ```
-__How to install__ </br>
+👉 __How to install__ </br>
 I recommend setting up a virtual environment with python version 3.10 </br>
 ```console
 conda create -n <name> python=3.10
@@ -46,9 +46,9 @@ The package can be installed using
 ```console
 pip3 install readet
 ```
-I also included the _requirements.txt_ file.
+I also included the _requirements.txt_ file. </br>
 
-__How to use__ </br>
+👉 __How to use__ </br>
 This package uses several _API_ s that need API keys. Fortunaletly, all of them are free for a while (or forever if you do not use them too often). Here is the list of APIs </br>
 1️⃣ OpenAI </br>
 2️⃣ Serp API </br>
@@ -64,7 +64,7 @@ SERP_API_KEY="<your key>" </br>
 ANTHROPIC_API_KEY ="<your key>" </br> 
 
 
-__quick example usage 1__ </br>
+:point_right __quick example usage 1__ </br>
 📖 _summarizers_ </br>
 I use the _PlainSummarizer_ as an example: </br>
 First, import necessary functions and classes </br> 
@@ -109,7 +109,7 @@ for count,pdf in enumerate(pdf_files):
 </br>
 Note that ingesting pdf files may take some time. For a general scientific paper it may take about 12 seconds. Later when I explain RAGs, I will describe a method to store ingested pdf files to avoid spending too much time reading pdf files from scratch. </br>
 
-__quick example usage 2__ </br>
+:point_right __quick example usage 2__ </br>
 📑 _RAGS_ </br>
 RAGS are used to ask questions about a document. Say you have a pdf file and you want to ask questions about the content without reading it. RAGS ingest the pdf file and store in a database (a vectorstore) and use LLMs to respond to your questions based on what they hold. All RAGs in this package can keep their database on your local computer. So you do not need to add pdf files from scratch all the time. </br>
 readet contains several RAGs but working with all of them is the same. I start with the _PlainRAG_ which is the simplest model: </br>
