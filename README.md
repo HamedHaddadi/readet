@@ -1,5 +1,5 @@
 # readet
-🚧 _until I prepare a more comprehensive documentation, use this readme to work with package_ </br>
+🚧 _until I prepare a more comprehensive documentation, use this readme to work with the package_ </br>
 ⚠️ If you run this package on a Windows machine, make sure you define the paths to files accordingly. </br>
 ⚠️ this documentation explains how to use the functionalities using a minimal set of inputs and using default arguments. But you can control parameters if you want. I will add the details in the documentation soon.
 
