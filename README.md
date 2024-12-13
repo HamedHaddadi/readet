@@ -1,6 +1,7 @@
 # readet
 🚧 _until I prepare a more comprehensive documentation, use this readme to work with package_ </br>
 ⚠️ If you run this package on a Windows machine, make sure you define the paths to files accordingly. </br>
+⚠️ this documentation explains how to use the functionalities using a minimal set of inputs and using default arguments. But you can control parameters if you want. I will add the details in the documentation soon.
 
 readet is a package developed using _LangChain_ for perusing scientific and technical literature. But all tools are applicable to any context. </br>
 Eventhough several functionalities are included in this package, such as multi-agent systems, these modules are used more frequently: </br>
@@ -124,8 +125,17 @@ You can define a RAG from scratch, or initialize it from saved data. I start fro
 pdf_file = './my_papers/fluidflow.pdf'
 # define your RAG store path here
 store_path = './myRAGS'
-
+rag = PlainRAG(pdf_file, store_path = store_path)
 ```
+</br>
+This will give you a function for asking questions </br>:
+```python
+rag("who are the authors of this work?")
+rag(""what is the relationship between fluid pressure and solid content?")
+```
+</br>
+
+
 
 
 
