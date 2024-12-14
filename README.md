@@ -58,7 +58,7 @@ readet
     ├── save_load.py
 ```
 👉 __How to install__ </br>
-I recommend setting up a virtual environment with python version 3.10 </br>
+I recommend setting up a virtual environment with python version 3.10. Choose a name and replace it with the <name> below </br>
 ```console
 conda create -n <name> python=3.10
 
