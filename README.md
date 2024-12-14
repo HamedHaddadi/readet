@@ -1,6 +1,28 @@
 # readet
 🚧 _until I prepare a more comprehensive documentation, use this readme to work with the package_ </br>
 ⚠️ If you run this package on a Windows machine, make sure you define the paths to files accordingly. </br>
+Look at the example path below: </br>
+
+```python
+import os
+import pathlib
+
+# Using os.path 
+windows_path = r"C:\Users\Me\Documents\"
+linux_path = "/home/me/documents/"
+
+# you can use os or pathlib and both are platform independent
+joined_path = os.path.join(windows_path, "file.txt")
+
+# Using pathlib
+path = pathlib.Path(linux_path, "my_file.txt")
+
+# for files:
+windows_file_path = r"C:\Users\Me\Documents\file.txt"
+linux_file_path = "/home/me/documents/file.txt"
+```
+
+
 ⚠️ this documentation explains how to use the functionalities using a minimal set of inputs and using default arguments. But you can control parameters if you want. I will add the details in the documentation soon.
 
 readet is a package developed using _LangChain_ for perusing scientific and technical literature. But all tools are applicable to any context. </br>
