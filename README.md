@@ -262,7 +262,7 @@ max_results = 100
 downloader = Download(save_path = save_path, max_results = max_results)
 
 # NOTE: if you want to download the paper, explicitly mention the word 'download'
-download("search and download all papers related to finite inertia suspension flow of ellipsoidal particles")
+downloader("search and download all papers related to finite inertia suspension flow of ellipsoidal particles")
 ```
 The downloaded files are stored in _save_path_. A '.txt' file containing information of the papers is also stored in the _save_path_ directory </br>
 For example, the first record in this file is : </br>
