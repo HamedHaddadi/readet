@@ -105,7 +105,7 @@ First, import necessary functions and classes </br>
 # use this function to load your API keys from keys.env file
 from readet.utils.io import load_keys
 load_keys('keys.env')
-from readet.core.summarizers import PlainSummarizers
+from readet.core.summarizers import PlainSummarizer
 ```
 </br>
 Now define parameters: </br>
