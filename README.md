@@ -1,10 +1,32 @@
 # readet
 🚧 _until I prepare a more comprehensive documentation, use this readme to work with the package_ </br>
 ⚠️ If you run this package on a Windows machine, make sure you define the paths to files accordingly. </br>
-⚠️ this documentation explains how to use the functionalities using a minimal set of inputs and using default arguments. But you can control parameters if you want. I will add the details in the documentation soon.
+Look at the example path below: </br>
+
+```python
+import os
+import pathlib
+
+# Using os.path 
+windows_path = r"C:\Users\Me\Documents\"
+linux_path = "/home/me/documents/"
+
+# you can use os or pathlib and both are platform independent
+joined_path = os.path.join(windows_path, "file.txt")
+
+# Using pathlib
+path = pathlib.Path(linux_path, "my_file.txt")
+
+# for files:
+windows_file_path = r"C:\Users\Me\Documents\file.txt"
+linux_file_path = "/home/me/documents/file.txt"
+```
+
+
+⚠️ this documentation explains how to use the functionalities using a minimal set of inputs and using default arguments. But you can control other parameters of each class or function. I will add more details in the documentation soon. </br>
 
 readet is a package developed using _LangChain_ for perusing scientific and technical literature. But all tools are applicable to any context. </br>
-Eventhough several functionalities are included in this package, such as multi-agent systems, these modules are used more frequently: </br>
+Eventhough several functionalities are included in this package, such as multi-agent systems, the following modules are used more frequently: </br>
 ➡️ summarizers that are used to summarize a text, mostly pdf files. </br>
 ➡️ RAGs or Retrieval Augmented Generation tools which can be used to ask questions about a document. </br>
 ➡️ prebuilt agents that are used to download papers and patents in bulk. </br>
@@ -34,36 +56,40 @@ readet
     ├── io.py
     ├── models.py
     ├── save_load.py
-    └── schemas.py
 ```
 👉 __How to install__ </br>
-I recommend setting up a virtual environment with python version 3.10 </br>
+I recommend setting up a virtual environment with python version 3.10. Choose a name and replace it with the name below </br>
 ```console
 conda create -n <name> python=3.10
+
 ```
 </br>
 Then you can activate the environment using </br>
 
 ```console
 conda activate <name>
+
 ```
 </br>
+
 This will make sure the package dependencies remain inside the virtual environment. 
-The package can be installed using 
+The package can be installed using </br> 
 ```console
 pip3 install readet
+
 ```
+
 I also included the _requirements.txt_ file. </br>
 
 👉 __How to use__ </br>
-This package uses several _API_ s that need API keys. Fortunaletly, all of them are free for a while (or forever if you do not use them too often). Here is the list of APIs </br>
+This package uses several _API_ s that need access tokens. Fortunaletly, all of them are free for a while (or forever if you do not use them too often). Here is the list of APIs </br>
 1️⃣ OpenAI </br>
 2️⃣ Serp API </br>
 3️⃣ Anthropic </br>
 4️⃣ Tavily Search </br>
 5️⃣ LangChain </br>
 6️⃣ Hugging Face </br>
-apply for 1️⃣ to 3️⃣ first. With these APIs you can use utilize most of the functionalities in this package. But it is good to obtain all APIs at some point. </br>
+apply for 1️⃣ to 3️⃣ first. With these APIs you can use utilize most of the functionalities in this package. But it is good to obtain all tokens at some point. </br>
 The easiest way is to define all API keys in a _keys.env_ file and load it in your environment. The keys.env file is structured as </br>
 OPENAI_API_KEY ="<you key>" </br>
 TAVILY_API_KEY="<your key>" </br>
@@ -79,7 +105,7 @@ First, import necessary functions and classes </br>
 # use this function to load your API keys from keys.env file
 from readet.utils.io import load_keys
 load_keys('keys.env')
-from readet.core.summarizers import PlainSummarizers
+from readet.core.summarizers import PlainSummarizer
 ```
 </br>
 Now define parameters: </br>
@@ -118,6 +144,9 @@ Note that ingesting pdf files may take some time. For a general scientific paper
 📑 _RAGS_ </br>
 
 RAGS are used to ask questions about a document. Say you have a pdf file and you want to ask questions about the content without reading it. RAGS ingest the pdf file and store in a database (a vectorstore) and use LLMs to respond to your questions based on what they hold. All RAGs in this package can keep their database on your local computer. So you do not need to add pdf files from scratch all the time. </br>
+
+⏲️ it takes about 10s to ingest a regular scientific paper of about 30 pages </br> 
+
 readet contains several RAGs but working with all of them is the same. Here is a list </br>
 1️⃣ _PlainRAG_: simple but useful RAG to ask questions about a pdf file </br>
 2️⃣ _RAGWithCitations_: similar to plainRAG, but returns the reference as well (see an example below) </br>
@@ -233,7 +262,7 @@ max_results = 100
 downloader = Download(save_path = save_path, max_results = max_results)
 
 # NOTE: if you want to download the paper, explicitly mention the word 'download'
-download("search and download all papers related to finite inertia suspension flow of ellipsoidal particles")
+downloader("search and download all papers related to finite inertia suspension flow of ellipsoidal particles")
 ```
 The downloaded files are stored in _save_path_. A '.txt' file containing information of the papers is also stored in the _save_path_ directory </br>
 For example, the first record in this file is : </br>
