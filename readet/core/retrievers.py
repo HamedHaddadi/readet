@@ -138,6 +138,7 @@ class ContextualCompression(Retriever):
 												 base_retriever = self.base_retriever.runnable) 
 		self.built = True 
 	
+	@property
 	def num_docs(self) -> int:
 		return len(self.base_retriever.runnable.docstore.store.keys()) 
 	
@@ -172,8 +173,17 @@ class ContextualCompression(Retriever):
 						embeddings: str = 'openai-text-embedding-3-large', documnet_loader: Literal['pypdf', 'pymupdf'] = 'pypdf', 
 							parent_splitter: Literal['recursive', 'token'] = 'recursive', child_splitter: Literal['recursive', 'token'] = 'recursive',
 								parent_chunk_size: int = 2000, parent_chunk_overlap: int = 200, child_chunk_size: int = 2000, child_chunk_overlap: int = 100) -> CC:
+		
+		versions = sorted([file_name for file_name in listdir(store_path) if file_name.startswith("parent_document_retriever_")])
+		if len(versions) == 0:
+			raise ValueError(f"Nothing is stored in {store_path}")
+		
 		if version_number == 'last':
-			store_version = sorted([file_name for file_name in listdir(store_path) if file_name.startswith("parent_document_retriever_")])[-1]
+			store_version = versions[-1]
+		elif isinstance(version_number, int) and (0 <= version_number < len(versions)):
+			store_version = versions[version_number]
+		else:
+			raise ValueError(f"Invalid version number: {version_number}; choose a number between 0 and {len(versions) - 1}")
 		
 		store = InMemoryStore()
 		store_dict = save_load.load_from_pickle(path.join(store_path, store_version))
@@ -198,8 +208,7 @@ class ParentDocument(Retriever):
 	"""
 	def __init__(self, documents: Optional[List[Document]] = None, 
 				embeddings: str = 'openai-text-embedding-3-large',
-				store: Optional[BaseStore] = None,
-				store_path: Optional[str] = None,
+				store: Optional[BaseStore] = None, store_path: Optional[str] = None,
 				parent_splitter: Literal['recursive', 'token'] = 'token', 
 			  	child_splitter: Literal['recursive', 'token'] = 'recursive', 
 					parent_chunk_size: int = 2000, parent_chunk_overlap: int = 200,
@@ -208,12 +217,10 @@ class ParentDocument(Retriever):
 		super().__init__()
 		self.parent_splitter = None 
 		self.child_splitter = None 
-		self.add_documents_count = 0
 
 		if parent_splitter == 'recursive':
 			self.parent_splitter = RecursiveCharacterTextSplitter(separators = None, 
-				chunk_size = parent_chunk_size, 
-				chunk_overlap = parent_chunk_overlap, add_start_index = True)
+				chunk_size = parent_chunk_size, chunk_overlap = parent_chunk_overlap, add_start_index = True)
 		elif parent_splitter == 'token':
 			self.parent_splitter = TokenTextSplitter()
 		
@@ -231,10 +238,13 @@ class ParentDocument(Retriever):
 			self.store = store
 
 		self.store_path = None 
+		self.add_documents_count = None 
 		if store_path is not None:
 			if not path.exists(store_path):
 				makedirs(store_path)
 			self.store_path = store_path
+			num_files = len([file_name for file_name in listdir(store_path) if file_name.endswith(".pkl")])
+			self.add_documents_count = num_files 
 
 		self.documents = documents
 		self.vector_store = Chroma(collection_name = "parent_document_retriever", 
@@ -255,6 +265,7 @@ class ParentDocument(Retriever):
 		
 		self.built = True 
 	
+	@property 
 	def num_docs(self) -> int:
 		return len(self.runnable.docstore.store.values())
 		
@@ -286,24 +297,29 @@ class ParentDocument(Retriever):
 						parent_chunk_size = parent_chunk_size, parent_chunk_overlap = parent_chunk_overlap, 
 							child_chunk_size = child_chunk_size, child_chunk_overlap = child_chunk_overlap)
 	@classmethod
-	def load_from_disk(cls, store_path: str, pdf_files: Optional[Union[str, List[str]]] = None, version_number: Literal['last'] | int = 'last', 
+	def load_from_disk(cls, store_path: str, pdf_files: Optional[Union[str, List[str]]] = None,
+					 version_number: Literal['last'] | int = 'last', 
 						embeddings: str = 'openai-text-embedding-3-large', document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf', 
 								parent_splitter: Literal['recursive', 'token'] = 'recursive', 
 									child_splitter: Literal['recursive', 'token'] = 'recursive',
 										parent_chunk_size: int = 2000, parent_chunk_overlap: int = 200,
 											child_chunk_size: int = 2000, child_chunk_overlap: int = 100) -> PD:
 		
-		if version_number == 'last':
-			versions = [file_name for file_name in listdir(store_path) if file_name.startswith("parent_document_retriever_")]
-			if len(versions) > 0:
-				store_version = sorted(versions)[-1]
-				store = InMemoryStore()	
-				store_dict = save_load.load_from_pickle(path.join(store_path, store_version))
-				store.mset(store_dict.items())
-			else:
-				warnings.warn("requesting a parent document retriever from disk but no version was found")
-				store = None  
+		versions = sorted([file_name for file_name in listdir(store_path) if file_name.startswith("parent_document_retriever_")])
+		if len(versions) == 0:
+			raise ValueError(f"Nothing is stored in {store_path}")
 		
+		if version_number == 'last':
+			store_version = versions[-1]
+		elif isinstance(version_number, int) and (0 <= version_number < len(versions)):
+			store_version = versions[version_number]
+		else:
+			raise ValueError(f"Invalid version number: {version_number}; choose a number between 0 and {len(versions) - 1}")
+		
+		store = InMemoryStore()	
+		store_dict = save_load.load_from_pickle(path.join(store_path, store_version))
+		store.mset(store_dict.items())
+			
 		documents = None 
 		if pdf_files is not None:
 			documents = docs.doc_from_pdf_files(pdf_files, document_loader, splitter = None)

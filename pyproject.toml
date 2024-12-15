@@ -1,0 +1,18 @@
+[project]
+name = "readet"
+version = "0.1.0"
+description = "LLM based tools and agents to fascilitate scientific research"
+authors = [{name = "Hamed Haddadi", email = "haddadi.h81@gmail.com"}]
+license = {file="LICENSE.md"}
+readme = "README.md"
+requires-python=">=3.10"
+dynamic=["dependencies"]
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[project.urls]
+Homepage = "https://github.com/HamedHaddadi/readet"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
