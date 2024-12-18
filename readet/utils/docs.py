@@ -1,7 +1,8 @@
 from langchain_community.document_loaders import PyPDFLoader, pdf
-from langchain_core.documents.base import Document 
+from langchain_core.documents.base import Document, Blob 
+from langchain_community.document_loaders.parsers.pdf import PyPDFParser
 from langchain_text_splitters import RecursiveCharacterTextSplitter, TokenTextSplitter
-from typing import Dict, List, Union, Literal, Any
+from typing import List, Union, Literal
 from os import PathLike
 from pathlib import Path    
 
@@ -44,4 +45,26 @@ def text_from_pdf(document: Union[str, PathLike]) -> Union[str, None]:
 			text = '\n'.join([doc.page_content for doc in pages])
 			return text 
 		else:
-			return None 	
+			return None 
+
+# ### generates Document objects from an encoded file ### #
+# useful for web apps that need pdf upload
+class DocumentFromEncodedFile:
+	"""
+	Takes an encoded file and uses a Blob and PyPDFParser to generate a list of Document objects.
+	"""
+	def __init__(self, decoded: bytes, extract_images = True, source = 'web'):
+		self.blob = Blob.from_data(decoded, metadata = {'source': source})
+		self.parser = PyPDFParser(extract_images = extract_images)
+		self.docs = self.parser.parse(self.blob)
+	
+	def __call__(self, split = True, chunk_size: int = 2000, chunk_overlap: int = 200) -> List[Document]:
+		if split:
+			splitter = RecursiveCharacterTextSplitter(chunk_size = chunk_size, chunk_overlap = chunk_overlap)
+			return splitter.split_documents(self.docs)
+		else:
+			return self.docs
+
+	def __len__(self):
+		return len(self.docs)
+

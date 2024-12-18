@@ -2,6 +2,8 @@
 # ################################################## #
 # Prebuilt functions and classes for agentic systems #
 # ################################################## #
+from functools import reduce 
+from os import listdir 
 from pydantic import BaseModel, Field   
 from typing import Literal, Annotated, List
 # langchain, langgraph 
@@ -256,11 +258,22 @@ class Download(Callable):
 	def __init__(self, save_path: str, max_results: int = 100, 
 			  		chat_model: str = 'openai-gpt-4o-mini', 
 						search_in: List[Literal['google_scholar', 'arxiv', 'google_patent']] = ['arxiv', 'google_scholar']) -> None:
+		self.save_path = save_path 
 		tools = [tool_name + '_search' for tool_name in search_in] + ['pdf_download']
 		self.agent = ReAct(tools = tools, chat_model = chat_model, added_prompt = self.PROMPT,  
 								max_results = max_results, save_path = save_path)
-	def __call__(self, query: str) -> None:
+	def __call__(self, query: str, list_files: bool = False) -> None:
 		self.agent(query)
+		replacements = {'_': ' ', '.pdf': ''}
+		if list_files:
+			pdf_files = [reduce(lambda a,kv: a.replace(*kv), replacements.items(), filename) for filename in listdir(self.save_path) if filename.endswith('.pdf')]
+			if len(pdf_files) >  0:
+				pdf_names = ''.join([f'{count}.{filename}\n' for count, filename in enumerate(pdf_files)])
+				newline = '\n'
+				return f"**The following pdf files are downloaded: {newline} {pdf_names}"
+			else:
+				return "**No pdf files are downloaded! check your Serp API key; or change the search query!"
+
 
 
 		

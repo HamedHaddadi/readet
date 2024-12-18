@@ -327,7 +327,7 @@ class SelfRAG:
 		prompt = ChatPromptTemplate.from_template(template)
 		self.rag_chain = prompt | llm | StrOutputParser()
 	
-	def _configure_hallucination_grader(self) -> None:
+	def _configure_hallucination_grader(self) -> None: 
 		llm = models.configure_chat_model(self.chat_model, temperature = 0)
 		struct_llm_grader = llm.with_structured_output(GradeHallucinations)
 		system  = HALLUCINATION_GRADER_PROMPT

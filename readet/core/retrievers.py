@@ -238,7 +238,7 @@ class ParentDocument(Retriever):
 			self.store = store
 
 		self.store_path = None 
-		self.add_documents_count = None 
+		self.add_documents_count = 0
 		if store_path is not None:
 			if not path.exists(store_path):
 				makedirs(store_path)
@@ -337,7 +337,7 @@ def get_retriever(documents: List[Document] | List[str] | str | None,
 			retriever_type: Literal['plain', 'contextual-compression', 'parent-document'] ='parent-document', **kwargs) -> Retriever:
 	
 	load_version_number = kwargs.get('load_version_number', None)
-	if load_version_number is not None and isinstance(load_version_number, (str, int)) and (isinstance(documents, (str, list)) or documents is None):
+	if load_version_number is not None and isinstance(load_version_number, (str, int)) and (isinstance(documents, str) or all(isinstance(doc, str) for doc in documents) or documents is None):
 		if retriever_type == 'parent-document':
 			retriever = ParentDocument.load_from_disk(kwargs.get('store_path'), pdf_files = documents,
 				version_number = load_version_number, embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'),
@@ -348,7 +348,7 @@ def get_retriever(documents: List[Document] | List[str] | str | None,
 		else:
 			raise ValueError(f"Invalid retriever type: {retriever_type}; choose 'patent-document'")
 
-	elif load_version_number is None and isinstance(documents, (list, str)):
+	elif load_version_number is None and (isinstance(documents, str) or all(isinstance(doc, str) for doc in documents)):
 		if retriever_type == 'parent-document':
 			retriever = ParentDocument.from_pdf(documents, store_path = kwargs.get('store_path'),
 				embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'),
@@ -362,7 +362,7 @@ def get_retriever(documents: List[Document] | List[str] | str | None,
 		else:
 			raise ValueError(f"Invalid retriever type: {retriever_type}; choose 'patent-document' or 'plain'")
 
-	elif all(isinstance(doc, Document) for doc in documents) and load_version_number is None:
+	elif all(isinstance(doc, Document) for doc in documents):
 		if retriever_type == 'plain':
 			retriever = PlainRetriever(documents, embeddings = kwargs.get('embeddings', 'openai-text-embedding-3-large'))
 		
