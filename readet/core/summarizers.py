@@ -33,22 +33,28 @@ class PlainSummarizer(Callable):
 		prompt = PromptTemplate.from_template(template)
 		self.chain = (prompt | llm)
 
-	def __call__(self, pdf_file: str | List[str], document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
+	def __call__(self, files: str | List[str] | List[Document], document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 					splitter: Literal['recursive', 'token'] | None = 'recursive', 
 						chunk_size: int = 2000, chunk_overlap: int = 200) -> str:
 		"""
 		no streaming is supported for this summarizer
 		input parameters:
-			pdf_file: pdf file to be summarized
+			files: files to be summarized; can be a single pdf file, a list of pdf files, or a list of Document objects
 			document_loader: document loader to be used
 			splitter: splitter to be used 
 			chunk_size: chunk size to be used
 			chunk_overlap: chunk overlap to be used
 		"""
-		document = docs.doc_from_pdf_files(pdf_file, document_loader = document_loader, splitter = splitter, 
+		if isinstance(files, str) or all(isinstance(file, str) for file in files):
+			documents = docs.doc_from_pdf_files(files, document_loader = document_loader, splitter = splitter, 
 									 	chunk_size = chunk_size, chunk_overlap = chunk_overlap)
-		if document is not None:
-			return self.chain.invoke(document).content 
+		elif all(isinstance(file, Document) for file in files):
+			documents = files 
+		else:
+			raise ValueError("Invalid input type for files")
+		
+		if documents is not None:
+			return self.chain.invoke(documents).content 
 		else:
 			return ""
 	

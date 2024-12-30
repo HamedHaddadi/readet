@@ -53,7 +53,7 @@ class DocumentFromEncodedFile:
 	"""
 	Takes an encoded file and uses a Blob and PyPDFParser to generate a list of Document objects.
 	"""
-	def __init__(self, decoded: bytes, extract_images = True, source = 'web'):
+	def __init__(self, decoded: bytes, extract_images = True, source = 'docs'):
 		self.blob = Blob.from_data(decoded, metadata = {'source': source})
 		self.parser = PyPDFParser(extract_images = extract_images)
 		self.docs = self.parser.parse(self.blob)

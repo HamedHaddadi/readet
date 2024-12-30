@@ -268,7 +268,7 @@ class Download(Callable):
 		if list_files:
 			pdf_files = [reduce(lambda a,kv: a.replace(*kv), replacements.items(), filename) for filename in listdir(self.save_path) if filename.endswith('.pdf')]
 			if len(pdf_files) >  0:
-				pdf_names = ''.join([f'{count}.{filename}\n' for count, filename in enumerate(pdf_files)])
+				pdf_names = ''.join([f'{count + 1}.{filename}\n' for count, filename in enumerate(pdf_files)])
 				newline = '\n'
 				return f"**The following pdf files are downloaded: {newline} {pdf_names}"
 			else:

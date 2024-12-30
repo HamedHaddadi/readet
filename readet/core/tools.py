@@ -533,13 +533,7 @@ def get_tool(tool_name: str, tools_kwargs: Dict) -> BaseTool:
 		return ListFilesTool(path_to_files = tools_kwargs.get('save_path', path.join(os.getcwd(), 'pdfs')),
 								suffix = suffix)
 	
-	elif tool_name == "query_by_keywords":
-		return QueryByKeywords(extractor = ExtractKeywords(chat_model = tools_kwargs.get('chat_model', 'openai-gpt-4o-mini')),
-					path_to_files = tools_kwargs.get('save_path', path.join(os.getcwd(), 'pdfs')),
-					rag_type = tools_kwargs.get('rag_type', 'agentic-rag-pdf'),
-					rag_chat_model = tools_kwargs.get('rag_chat_model', 'openai-gpt-4o-mini'),
-					rag_embedding_model = tools_kwargs.get('rag_embedding_model', 'openai-text-embedding-3-large'))
-	
+
 	elif tool_name == "rag":
 		return RAGTool(path_to_files = tools_kwargs.get('save_path', path.join(os.getcwd(), 'pdfs')))	
 	
