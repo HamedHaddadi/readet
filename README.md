@@ -1,7 +1,7 @@
 # readet
 🚧 _until I prepare a more comprehensive documentation, use this readme to work with the package_ </br>
 </br>
-🔴 you can directly use the web interface: go to [readet.ai](url) 
+🔴 you can directly use the web interface: go to [www.readet.ai](url) 
 </br>
 ⚠️ If you run this package on a Windows machine, make sure you define the paths to files accordingly. </br>
 Look at the example path below: </br>
