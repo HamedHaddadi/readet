@@ -3,7 +3,7 @@
 # Prebuilt functions and classes for agentic systems #
 # ################################################## #
 from functools import reduce 
-from os import listdir 
+from os import listdir, PathLike, path, getcwd    
 from pydantic import BaseModel, Field   
 from typing import Literal, Annotated, List
 # langchain, langgraph 
@@ -11,7 +11,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import StateGraph, START, END 
 from langgraph.checkpoint.memory import MemorySaver 
 # readet modules 
-from .. utils import models  
+from .. utils import models, docs  
 from .. core import tools as readet_tools 
 from . agents import ReAct 
 from . components import *  
@@ -273,6 +273,42 @@ class Download(Callable):
 				return f"**The following pdf files are downloaded: {newline} {pdf_names}"
 			else:
 				return "**No pdf files are downloaded! check your Serp API key; or change the search query!"
+
+# ################################################## #
+# 	Text to chart agent 							 #
+# ################################################## #
+class TextToCharts(Callable):
+	"""
+	Text to chart agent using PythonREPL and react agent
+	chat_model: the chat model to use for the agent
+	save_path: the path to save the charts
+	"""
+	PROMPT = f""" you are a python code developer that reads the text
+	  and generates python code for generating charts. 
+	"""
+	def __init__(self, chat_model: str = 'openai-gpt-4o', 
+			  		save_path: Optional[str] = None) -> None:
+		self.save_path = {True: getcwd(), False: save_path}[save_path is None]
+		self.agent = ReAct(tools = ['python_repl'], chat_model = chat_model, added_prompt = self.PROMPT)
+
+	def __call__(self, text:str | PathLike) -> None:
+		if path.isfile(text) and text.endswith('.pdf'):
+			text = docs.text_from_pdf(text)
+		
+		message = f""" generate chart with nice styling and Times New Roman for font axis
+                    from the following text. Text information may allow you
+					  to generate more than one chart. If so, attach 
+                        multiple figures as subfigures. 
+						save the figures in the {self.save_path} directory with 'jpeg' format.
+                        Do not generate reduntant charts. Here is the text: \n {text} \n
+		"""
+		self.agent(message)
+
+
+
+
+
+
 
 
 

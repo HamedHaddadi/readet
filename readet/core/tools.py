@@ -10,9 +10,10 @@ from arxiv import Search as ArSearch
 from arxiv import Client as ArClient    
 from serpapi import Client 
 from pydantic import BaseModel, Field, root_validator, model_validator
+from langchain_experimental.utilites import PythonREPL 
 from langchain_core.tools import BaseTool 
 from langchain_core.prompts import PromptTemplate  
-from typing import Literal, Optional, Any, Dict, Union, List, Sequence
+from typing import Literal, Optional, Any, Dict, Union, List, Sequence, Annotated
 from urllib.request import urlretrieve  
 from . summarizers import SUMMARIZERS
 from . rags import PlainRAG  
@@ -28,7 +29,6 @@ EXTRACT_KEYWORDS_PROMPT = """
         corporation, or the name of authors or people. Extract keywords that are technically relevant
 {text}	
 """
-
 
 # ## Google Scholar Search Tool ## #
 # API Wrapper
@@ -397,6 +397,34 @@ class ListFilesTool(BaseTool):
 						if self.suffix in file_name]
 		return files  
 
+# ######### python repl tool ######### #
+class PythonREPLRun(BaseModel):
+	""" pydantic model for the python REPL"""
+	repl: Any 
+	@model_validator(mode = 'before')
+	def setup_repl(cls, values: Dict) -> Dict:
+		values['repl'] = PythonREPL()
+		return values
+	def run(self, code: Annotated[str, "The python code to execute for doing math of generating charts"]) -> str:
+		try:
+			results = self.repl.run(code)
+		except Exception as e:
+			return f"Failed to execute with Error: {e}"
+		results_str = f"successfully executed: \n python code: \n {code} \n with results: \n {results}"
+		return results_str
+
+class PythonREPLTool(BaseTool):
+	name: str = "python_repl_tool"
+	description: str = """
+		This tool is to used to execute python code and do math and chart generation from text. Use this tool
+            to execute python code and do math and to generate charts from text.
+	"""
+	repl: PythonREPLRun
+
+	def _run(self, code:Annotated[str, "The python code to execute for doing math of generating charts"]) -> str:
+		return self.repl.run(code)
+
+
 # ######### keyword extraction tool ######### #
 class Keywords(BaseModel):
 	keywords_list: Sequence[str] = Field(default = [], description = 'list of extracted keywords')
@@ -533,6 +561,8 @@ def get_tool(tool_name: str, tools_kwargs: Dict) -> BaseTool:
 		return ListFilesTool(path_to_files = tools_kwargs.get('save_path', path.join(os.getcwd(), 'pdfs')),
 								suffix = suffix)
 	
+	elif tool_name == "python_repl":
+		return PythonREPLTool(repl = PythonREPLRun())
 
 	elif tool_name == "rag":
 		return RAGTool(path_to_files = tools_kwargs.get('save_path', path.join(os.getcwd(), 'pdfs')))	
