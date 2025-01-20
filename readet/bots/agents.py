@@ -38,4 +38,6 @@ class ReAct:
 
 	def __call__(self, query: str):
 		self.run(query)
+	
+	
 

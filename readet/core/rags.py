@@ -1,6 +1,7 @@
 # ################################# #
 # All RAGS and query systems		#
 # ################################# #
+from os import path 
 from typing import (Optional, Dict, List,Union, Any, TypedDict, Annotated, Sequence, Literal)
 from langchain_core.documents import Document 
 from langchain_core.messages import BaseMessage, HumanMessage
@@ -32,6 +33,15 @@ PLAIN_RAG_PROMPT = """
 	Context: {context} 
 	Answer:
 """
+CITATION_RAG_PROMPT = """
+	You are a helpful AI assistent. Answer user;s question using the context that is provided
+	to you. Make sure to include the citations that are provided along with context. 
+	If the context is not enough for you to answer the question, say you do not know. 
+	Here is the context: {context}
+	and here are the citations:  {citations}
+	Use all citations that apply to the context in your final answer and include the page number as well.
+"""
+
 RETRIEVAL_GRADER_PROMPT = """
 You are a grader assessing relevance of a retrieved answer to a user question. \n 
     It does not need to be a stringent test. The goal is to filter out erroneous retrievals. \n
@@ -93,7 +103,7 @@ class PlainRAG(Callable):
 					store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
 					pkl_object: Optional[str| Dict] = None,
 					chat_model: str = 'openai-gpt-4o-mini',
-						prompt: Optional[str] = 'rag',
+						prompt: Optional[str] = PLAIN_RAG_PROMPT,
 					document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf', 
 						splitter: Literal['recursive', 'token'] = 'recursive',
 							kwargs: Dict[str, Any] = {}):
@@ -108,21 +118,14 @@ class PlainRAG(Callable):
 			raise ValueError(f"retriever must be a Retriever object or a string in ['parent-document']")
 		
 		self.llm = models.configure_chat_model(chat_model, temperature = 0) 
-		self.prompt = prompt 
+		
+		self.prompt = ChatPromptTemplate.from_messages([
+			("system", prompt), 
+			("human", "{question}")
+		])
 		self.runnable = None  
 		self.built = False 
 	
-	def __setattr__(self, name: str, value: Any) -> None:
-		if name == 'prompt':
-			if value in ['rag']:
-				template = PLAIN_RAG_PROMPT
-				super(PlainRAG, self).__setattr__(name, ChatPromptTemplate.from_template(template))
-			elif isinstance(value, str) and len(value.split(' ')) > 1:
-				super(PlainRAG, self).__setattr__(name, value)
-			elif value is None:
-				raise ValueError('prompt cannot be None') 
-		else:
-			super(PlainRAG, self).__setattr__(name, value)
 	
 	def set_retriever(self, retriever: Retriever) -> None:
 		"""
@@ -187,7 +190,7 @@ class RAGWithCitations(PlainRAG):
 				embeddings: str = 'openai-text-embedding-3-large', 
 					store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
 					pkl_object: Optional[str| Dict] = None, chat_model: str = 'openai-gpt-4o-mini',
-						prompt: Optional[str] = 'rag',
+						prompt: Optional[str] = PLAIN_RAG_PROMPT,
 					document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf', 
 						splitter: Literal['recursive', 'token'] = 'recursive',
 							kwargs: Dict[str, Any] = {}):
@@ -216,6 +219,83 @@ class RAGWithCitations(PlainRAG):
 	
 	def __call__(self, query: str, parse = True) -> str:
 		return self.run(query, parse)
+
+# ################################### #
+# Citation RAG 					  #
+# ################################### #
+CITATION_RAG_PROMPT = """
+You are a helpful AI assistent. Answer user;s question using the context that is provided
+to you. Make sure to include the citations that are provided along with context. 
+If the context is not enough for you to answer the question, say you do not know. 
+Here is the context: {context}
+and here are the citations:  {citations}
+Use all citations that apply to the context in your final answer and include the page number as well.
+"""
+
+class CiteRAGState(TypedDict):
+	"""
+	State of the Citation RAG graph
+	"""
+	question: str 
+	context: List[str] 
+	citations: List[str]
+	answer: str 
+
+class CitationRAG(PlainRAG):
+	"""
+	Citation RAG that the cites articles in the final answer
+	articles are PDF documents supplied to the retriever
+	"""
+	def __init__(self, documents: Optional[Union[List[Document], List[str], str]] = None, retriever: Union[str, Retriever] = 'parent-document', 
+				embeddings: str = 'openai-text-embedding-3-large', 
+					store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
+					pkl_object: Optional[str| Dict] = None, chat_model: str = 'openai-gpt-4o-mini',
+						prompt: Optional[str] = CITATION_RAG_PROMPT,
+					document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf', 
+						splitter: Literal['recursive', 'token'] = 'recursive',
+							kwargs: Dict[str, Any] = {}):
+		super(CitationRAG, self).__init__(documents=documents, retriever=retriever, embeddings=embeddings, store_path=store_path,
+					load_version_number = load_version_number, pkl_object = pkl_object, chat_model=chat_model, prompt=prompt, 
+						document_loader=document_loader, splitter=splitter, kwargs=kwargs)
+		self.rag_chain = self.prompt | self.llm 
+		self.built = False 
+		
+	
+	def retrieve_context_citations(self, state: CiteRAGState) -> Dict[str, Union[str, List[str]]]:
+		docs = self.retriever.runnable.invoke(state['question'])
+		context = []
+		citations = []
+		for doc in docs:
+			context.append(doc.page_content)
+			citations.append(f"{path.basename(doc.metadata['source'])} on page {doc.metadata['page']}") 
+		
+		print(citations)
+		return {"context": context, "citations": citations}
+	
+	def generate(self, state: CiteRAGState) -> Dict[str, str]:
+		response = self.rag_chain.invoke({"context": state['context'],
+									  "citations": state['citations'], 
+									  "question": state['question']})
+		return {"answer": response.content}
+	
+	def build(self) -> None:
+		flow = StateGraph(CiteRAGState)
+		flow.add_node("retrieve_context_citations", self.retrieve_context_citations)
+		flow.add_node("generate", self.generate)
+		flow.add_edge(START, "retrieve_context_citations")
+		flow.add_edge("retrieve_context_citations", "generate")
+		self.runnable = flow.compile()
+		self.built = True 
+	
+	def run(self, query: str) -> str:
+		if self.built is False:
+			self.build()
+		response = self.runnable.invoke({"question": query})
+		return response['answer']
+	
+	def __call__(self, query: str) -> str:
+		return self.run(query)
+
 	
 
 

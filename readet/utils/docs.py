@@ -32,6 +32,7 @@ def doc_from_pdf_files(pdf_files: Union[str, List[str]],
 			documents.extend(loader_obj(pdf_file, extract_images = True).load_and_split(splitter))
 	else:
 		for pdf_file in pdf_files:
+			print(f"loading {pdf_file}")
 			documents.extend(loader_obj(pdf_file, extract_images = True).load())
 	return documents
 

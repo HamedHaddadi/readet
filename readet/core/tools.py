@@ -10,7 +10,7 @@ from arxiv import Search as ArSearch
 from arxiv import Client as ArClient    
 from serpapi import Client 
 from pydantic import BaseModel, Field, root_validator, model_validator
-from langchain_experimental.utilites import PythonREPL 
+from langchain_experimental.utilities import PythonREPL 
 from langchain_core.tools import BaseTool 
 from langchain_core.prompts import PromptTemplate  
 from typing import Literal, Optional, Any, Dict, Union, List, Sequence, Annotated
