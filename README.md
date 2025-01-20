@@ -152,7 +152,7 @@ RAGS are used to ask questions about a document. Say you have a pdf file and you
 
 readet contains several RAGs but working with all of them is the same. Here is a list </br>
 1️⃣ _PlainRAG_: simple but useful RAG to ask questions about a pdf file </br>
-2️⃣ _RAGWithCitations_: similar to plainRAG, but returns the reference as well (see an example below) </br>
+2️⃣ _CitationRAG_: similar to plainRAG, but returns the reference as well (see an example below) </br>
 3️⃣ _AgenticRAG_: RAG with extra checks to make sure the answer is relevant to the context of the document </br>
 4️⃣ _SelfRAG_: RAG with introspection, to avoid hallucination </br>
 5️⃣ _AdaptiveRAG_: RAG that screens the question based on the relevance to the document. If not relevant, it gives an answer by google search. For example, it does not allow you to answer question about salsa dancing from a fluid dynamics text </br>
@@ -200,23 +200,22 @@ rag2("what is the relationship between inertia and viscosity?")
 ```
 </br>
 
-Let's use _RAGWithCitations_ as well: </br>
+Let's use _CitationRAG_ as well; you may want to input multiple PDF files: </br>
 
 ```python
 from readet.utils.io import load_keys
 load_keys('keys.env')
-from readet.core.rags import RAGWithCitations
-pdf_file = './files/HaddadiMorrisJFM2014.pdf'
+from readet.core.rags import CitationRAG
+documents = ['./files/HaddadiMorrisJFM2014.pdf', './files/KulkarniMorrisPOF2008', './files/CorreiraRazavi2023.pdf']
 store_path = './RAGStore'
-rag = RAGWithCitations(pdf_file, store_path = store_path)
-rag("what is the relationship between inertia and normal stress?")
+rag = RAGWithCitations(documents, store_path = store_path)
+rag("what is surface rheology?")
 ```
 </br>
 And here is the answer: 
 
 ```console
-'Inertia affects the normal stress in suspensions by influencing the distribution of particles and their interactions under shear flow. As inertia increases, it can lead to higher particle pressure and changes in the normal stress differences, particularly the first normal stress difference (N1), which becomes more negative with increasing inertia and volume fraction. This relationship highlights the complex interplay between inertia and stress in particle-laden fluids, where increased inertia amplifies the effects of excluded volume and alters the stress distribution within the suspension.',
- 'Haddadi, H. & Morris, J. F. (2023). Microstructure and Rheology of Finite Inertia Suspensions. J. Fluid Mech.'
+Surface rheology refers to the study of the mechanical properties of interfaces, particularly the behavior of surfactant layers at the air-water interface or between two immiscible liquids. It involves measuring how these layers respond to deformations, such as stretching or compressing, and how they behave under dynamic conditions, such as oscillations or flow. \n\nIn the context provided, surface rheology is explored through techniques like oscillating bubbles and rising bubbles, which allow researchers to probe the viscoelastic properties of surfactant solutions. The surface rheological properties can be characterized by parameters such as the elastic modulus (E') and the viscous modulus (E''), which describe the elastic and viscous responses of the surface, respectively. The study of surface rheology is important for understanding the stability and dynamics of foams, emulsions, and other complex interfacial systems (CoreiraRazavi.pdf on page 2, page 3, page 10).
 ```
 </br>
 
