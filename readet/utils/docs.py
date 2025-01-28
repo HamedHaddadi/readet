@@ -3,12 +3,19 @@ from langchain_core.documents.base import Document, Blob
 from langchain_community.document_loaders.parsers.pdf import PyPDFParser
 from langchain_text_splitters import RecursiveCharacterTextSplitter, TokenTextSplitter
 from typing import List, Union, Literal
-from os import PathLike
+from os import path, PathLike, listdir
 from pathlib import Path    
 
 # ################################ #
 # utilities to work with documents #
 # ################################ #
+
+def get_pdf_files(pdf_files: Union[str, List[str]]) -> List[PathLike]:
+	if isinstance(pdf_files, str):
+		return [path.join(pdf_files, file_name) for file_name in listdir(pdf_files) if file_name.endswith('.pdf')]
+	elif isinstance(pdf_files, (list, tuple)):
+		return pdf_files
+
 
 def doc_from_pdf_files(pdf_files: Union[str, List[str]], 
 						document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
@@ -29,7 +36,12 @@ def doc_from_pdf_files(pdf_files: Union[str, List[str]],
 
 	if splitter is not None:
 		for pdf_file in pdf_files:
-			documents.extend(loader_obj(pdf_file, extract_images = True).load_and_split(splitter))
+			try:
+				loader = loader_obj(pdf_file, extract_images = True)
+				docs = loader.load_and_split(splitter)
+				documents.extend(docs)
+			except:
+				pass
 	else:
 		for pdf_file in pdf_files:
 			print(f"loading {pdf_file}")

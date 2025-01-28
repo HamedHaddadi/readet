@@ -254,7 +254,7 @@ class Download(Callable):
 	Download agent using ReAct class. searches and downloads papers from arxiv and scholar
 	"""
 	PROMPT = """You are a specialized assistant for searching technical papers on google
-				scholar and arxiv and downloading them. use the tools provided to you to complete the task."""
+				scholar and arxiv and downloading them. search and download all the papers that are relevant to the query."""
 	def __init__(self, save_path: str, max_results: int = 100, 
 			  		chat_model: str = 'openai-gpt-4o-mini', 
 						search_in: List[Literal['google_scholar', 'arxiv', 'google_patent']] = ['arxiv', 'google_scholar']) -> None:

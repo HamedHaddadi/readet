@@ -104,7 +104,7 @@ class PlainRAG(Callable):
 					pkl_object: Optional[str| Dict] = None,
 					chat_model: str = 'openai-gpt-4o-mini',
 						prompt: Optional[str] = PLAIN_RAG_PROMPT,
-					document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf', 
+					document_loader: Literal['pypdf', 'pymupdf'] = 'pymupdf', 
 						splitter: Literal['recursive', 'token'] = 'recursive',
 							kwargs: Dict[str, Any] = {}):
 				
@@ -191,7 +191,7 @@ class RAGWithCitations(PlainRAG):
 					store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
 					pkl_object: Optional[str| Dict] = None, chat_model: str = 'openai-gpt-4o-mini',
 						prompt: Optional[str] = PLAIN_RAG_PROMPT,
-					document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf', 
+					document_loader: Literal['pypdf', 'pymupdf'] = 'pymupdf', 
 						splitter: Literal['recursive', 'token'] = 'recursive',
 							kwargs: Dict[str, Any] = {}):
 		super(RAGWithCitations, self).__init__(documents=documents, retriever=retriever, embeddings=embeddings, store_path=store_path,
@@ -251,7 +251,7 @@ class CitationRAG(PlainRAG):
 					store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
 					pkl_object: Optional[str| Dict] = None, chat_model: str = 'openai-gpt-4o-mini',
 						prompt: Optional[str] = CITATION_RAG_PROMPT,
-					document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf', 
+					document_loader: Literal['pypdf', 'pymupdf'] = 'pymupdf', 
 						splitter: Literal['recursive', 'token'] = 'recursive',
 							kwargs: Dict[str, Any] = {}):
 		super(CitationRAG, self).__init__(documents=documents, retriever=retriever, embeddings=embeddings, store_path=store_path,
@@ -269,7 +269,6 @@ class CitationRAG(PlainRAG):
 			context.append(doc.page_content)
 			citations.append(f"{path.basename(doc.metadata['source'])} on page {doc.metadata['page']}") 
 		
-		print(citations)
 		return {"context": context, "citations": citations}
 	
 	def generate(self, state: CiteRAGState) -> Dict[str, str]:

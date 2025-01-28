@@ -102,7 +102,7 @@ class GoogleScholarSearch(BaseModel):
             f"Title: {result.get('Title','')}\n"
             f"Authors: {result.get('Authors')}\n"  
             f"Citation Count: {result.get('Citation Count')}\n"
-            f"PDF Link: {result.get('PDF Link')}"  
+            f"PDF Link: {result.get('PDF Link')} \n"  
             for result in all_results]
 		results = "\n\n".join(docs)
 		if self.save_path is not None:
