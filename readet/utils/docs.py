@@ -2,9 +2,10 @@ from langchain_community.document_loaders import PyPDFLoader, pdf
 from langchain_core.documents.base import Document, Blob 
 from langchain_community.document_loaders.parsers.pdf import PyPDFParser
 from langchain_text_splitters import RecursiveCharacterTextSplitter, TokenTextSplitter
-from typing import List, Union, Literal
+from typing import List, Union, Literal, Any 
 from os import path, PathLike, listdir
-from pathlib import Path    
+from pathlib import Path   
+from tqdm import tqdm  
 
 # ################################ #
 # utilities to work with documents #
@@ -30,22 +31,27 @@ def doc_from_pdf_files(pdf_files: Union[str, List[str]],
 	elif splitter == 'token':
 		splitter = TokenTextSplitter()
 
-	documents = []
 	if not isinstance(pdf_files, (list, tuple)):
 		pdf_files = [pdf_files]
 
-	if splitter is not None:
-		for pdf_file in pdf_files:
-			try:
-				loader = loader_obj(pdf_file, extract_images = True)
+	
+	def get_docs(loader: Any) -> List[Document]:
+		try:
+			if splitter is not None:
 				docs = loader.load_and_split(splitter)
-				documents.extend(docs)
-			except:
-				pass
-	else:
-		for pdf_file in pdf_files:
-			print(f"loading {pdf_file}")
-			documents.extend(loader_obj(pdf_file, extract_images = True).load())
+			else:
+				docs = loader.load()
+			return docs
+		except:
+			return None 
+
+	documents = []
+	for pdf_file in tqdm(pdf_files):
+		loader = loader_obj(pdf_file, extract_images = True)
+		docs = get_docs(loader)
+		if docs is not None:
+			documents.extend(docs)
+		
 	return documents
 
 
