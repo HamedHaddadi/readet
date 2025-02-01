@@ -3,7 +3,7 @@
 # ################################################## #
 import operator 
 from tqdm import tqdm 
-from typing import Union, List, Literal, Dict, Any, Annotated, TypedDict 
+from typing import Union, List, Literal, Dict, Any, Annotated, TypedDict, Optional
 from pydantic import BaseModel, Field 
 from os import path, makedirs, listdir 
 from .. utils import models 
@@ -109,14 +109,15 @@ Many complex fluids exhibit a yield stress, meaning they do not flow until a cer
 This is a critical property in applications involving suspensions and emulsions, 
 where the material may behave like a solid until sufficient stress is applied (Eow & Ghadiri, 2002)
 
-2.No preamble or intro before writing the section.Strictly focus on this section.
+2.No preamble or intro before writing the section. 
+	Do not write a separate summary or conclusion either. Focus on elaborating the content of this section.
 
-2. Length and style:
+3. Length and style:
  Technical focus
  Maximum 2000 words for each section
  simple and clear language
 
-3. Structure and formatting:
+4. Structure and formatting:
 - Use ## for section title (Markdown format)
 - Only use ONE structural element IF it helps clarify your point:
 - put references in paranthesis
@@ -204,25 +205,33 @@ class WriterWithScholarSearch:
 	Writer that uses scholar search to generate context for the report
 	max_results: maximum number of results to return from scholar search per query 
 	"""
-	def __init__(self, save_path: str, max_search: int = 10, max_questions: int = 10,
+	def __init__(self, save_path: Optional[str] = None, max_search: int = 10, max_questions: int = 10,
 			  main_llm: str = "openai-o1-mini", helper_llm: str = "openai-gpt-4o",
+			  	rag: Optional[CitationRAG] = None,
 			    retriever: Union[str, Retriever] = 'parent-document', 
 					embeddings: str = 'openai-text-embedding-3-large',
 						chat_model: str = 'openai-gpt-4o-mini',
 								document_loader: Literal['pypdf', 'pymupdf'] = 'pymupdf', 
 									splitter: Literal['recursive', 'token'] = 'recursive',
 										kwargs: Dict[str, Any] = {}) -> None:
+		if save_path is not None:
+			if not path.exists(save_path):
+				makedirs(save_path)
+			self.save_path = save_path
+		else:
+			self.save_path = None
 		
-		self.rag_arguments = {key:value for key,value in locals().items() 
-						if key not in ['self', 'max_search', 'question_llm', 'save_path']} 
-		if not path.exists(save_path):
-			makedirs(save_path)
-		self.save_path = save_path
-
-		rag_store_path = path.join(save_path, "rag")
-		if not path.exists(rag_store_path):
-			makedirs(rag_store_path)
-		self.rag_arguments["store_path"] = rag_store_path
+		self.rag = None
+		if rag is None:
+			self.rag_arguments = {key:value for key,value in locals().items() 
+						if key not in ['self', 'max_search', 'question_llm', 'save_path', 'rag']}
+			rag_store_path = path.join(self.save_path, "rag")
+			if not path.exists(rag_store_path):
+				makedirs(rag_store_path)
+			self.rag_arguments["store_path"] = rag_store_path
+		else:
+			self.rag = rag
+			
 
 		self.max_search = max_search
 		self.max_questions = max_questions
@@ -230,7 +239,6 @@ class WriterWithScholarSearch:
 		self.main_llm = models.configure_chat_model(main_llm)
 		self.helper_llm = models.configure_chat_model(helper_llm)
 		self.search_agent = None 
-		self.rag = None 
 
 		# graphs
 		self.section_writer = None 
@@ -244,21 +252,17 @@ class WriterWithScholarSearch:
 		return [line for line in lines if 'Question' and '?' in line]
 	
 	# Main functions #
-	def plan_report(self, state: ReportState) -> List[Section]:
-		topic = state["topic"]
-		f_report_structure = REPORT_STRUCTURE.format(topic = topic)
-		main_points = state["main_points"]
-		f_query_generation_instructions = INITIAL_QUERY_GENERATION_INSTRUCTIONS.format(topic = topic, main_points = main_points)
-
-		message = self.main_llm.invoke([HumanMessage(content = f_query_generation_instructions)])	
-		questions = self._parse_questions(message.content)
+	def _build_knowlege_base(self, questions: List[str]) -> None:
+		"""
+		This method is called if no RAG is provided
+		"""
 
 		self.search_agent = ReAct(tools = ["google_scholar_search", "arxiv_search", "pdf_download"], 
 				added_prompt = "You are an AI assistant; search and download all papers that are related to the user query",
 				  save_path = self.save_path, max_results = self.max_search)
 		
 		print(f"Searching for {len(questions)} questions")
-		for q in tqdm(questions[:1]):
+		for q in tqdm(questions):
 			self.search_agent(f"search and download all papers related to this question {q}")
 		
 		pdf_files = [path.join(self.save_path, f) for f in listdir(self.save_path) if f.endswith('.pdf')]
@@ -266,7 +270,20 @@ class WriterWithScholarSearch:
 		self.rag = CitationRAG(pdf_files, retriever = self.rag_arguments["retriever"], 
 								embeddings = self.rag_arguments["embeddings"], 
 								store_path = self.rag_arguments["store_path"], 
-								chat_model = self.rag_arguments["chat_model"])
+								chat_model = self.rag_arguments["chat_model"], 
+									load_version_number  = None)
+
+
+	def plan_report(self, state: ReportState) -> List[Section]:
+		topic = state["topic"]
+		f_report_structure = REPORT_STRUCTURE.format(topic = topic)
+		main_points = state["main_points"]
+		f_query_generation_instructions = INITIAL_QUERY_GENERATION_INSTRUCTIONS.format(topic = topic, main_points = main_points)
+		message = self.main_llm.invoke([HumanMessage(content = f_query_generation_instructions)])	
+		questions = self._parse_questions(message.content)
+		if self.rag is None:
+			self._build_knowlege_base(questions)
+
 		context = "\n".join([self.rag(q) for q in questions])
 		plan_llm = self.helper_llm.with_structured_output(Sections)
 
@@ -395,6 +412,26 @@ class WriterWithScholarSearch:
 	
 	def __call__(self, *args, **kwargs):
 		pass 
+
+	@classmethod
+	def from_previous_search(cls, store_path: str,
+						  load_version_number: Literal['last'] | int = 'last', retriever: Union[str, Retriever] = 'parent-document',
+						  embeddings: str = 'openai-text-embedding-3-large',
+						  chat_model: str = 'openai-gpt-4o-mini',
+						  document_loader: Literal['pypdf', 'pymupdf'] = 'pymupdf',
+						  splitter: Literal['recursive', 'token'] = 'recursive',
+						  max_search: int = 10, max_questions: int = 10,
+						   main_llm: str = "openai-o1-mini", helper_llm: str = "openai-gpt-4o", **kwargs):
+		"""
+		Load the previous vector for generating a knowledge base
+		Potentially useful for situations when user adds to the questions or topics or main points 
+		"""
+		rag = CitationRAG(documents = None, retriever = retriever, embeddings = embeddings, chat_model = chat_model,
+							document_loader = document_loader, splitter = splitter, store_path = store_path,
+							load_version_number = load_version_number)
+		return cls(rag = rag, max_search = max_search, max_questions = max_questions, 
+			 	main_llm = main_llm, helper_llm = helper_llm, **kwargs)
+
 
 		
 

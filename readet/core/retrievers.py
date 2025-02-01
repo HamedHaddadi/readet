@@ -27,11 +27,11 @@ def format_documents(documents: List[Document]) -> str:
 								   	d.page_content for i, d in enumerate(documents)])
 
 def load_store_from_disk(store_path: Optional[str] = None,
-						  version_number: Optional[Literal['last'] | int] = None, 
+						  version_number: Literal['last'] | int = 'last', 
 						  pkl_object: Optional[str| Dict] = None) -> Dict[str, Any]:
 	
 	store = InMemoryStore()
-	if store_path is not None and version_number is not None and pkl_object is None:
+	if store_path is not None and pkl_object is None:
 		versions = sorted([file_name for file_name in listdir(store_path) if file_name.startswith("persisted_retriever_")])
 		if len(versions) == 0:
 			raise ValueError(f"Nothing is stored in {store_path}")
