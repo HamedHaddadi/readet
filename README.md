@@ -30,33 +30,35 @@ readet is a package developed using _LangChain_ for perusing scientific and tech
 Eventhough several functionalities are included in this package, such as multi-agent systems, the following modules are used more frequently: </br>
 ➡️ summarizers that are used to summarize a text, mostly pdf files. </br>
 ➡️ RAGs or Retrieval Augmented Generation tools which can be used to ask questions about a document. </br>
-➡️ prebuilt agents that are used to download papers and patents in bulk. </br>
+➡️ single shot agents that are used to download papers and patents in bulk. </br>
+➡️ agentic systems for drafting articles and writing structured reviews. </br> 
 
 here is the current directory tree of the package </br>
 ```console
-readet
-├── __init__.py
-├── bots
-│   ├── __init__.py
-│   ├── agents.py
-│   ├── chat_tools.py
-│   ├── components.py
-│   ├── multi_agents.py
-│   └── prebuilt.py
-├── core
-│   ├── __init__.py
-│   ├── chains.py
-│   ├── knowledge_graphs.py
-│   ├── rags.py
-│   ├── retrievers.py
-│   ├── summarizers.py
-│   └── tools.py
-└── utils
-    ├── __init__.py
-    ├── docs.py
-    ├── io.py
-    ├── models.py
-    ├── save_load.py
+|-bots
+  |  |-chat_tools.py
+  |  |-prebuilt.py
+  |  |-__init__.py
+  |  |-agents.py
+  |  |-multi_agents.py
+  |  |-components.py
+  |  |-report_writers.py
+  |-core
+  |  |-chains.py
+  |  |-rags.py
+  |  |-retrievers.py
+  |  |-tools.py
+  |  |-__init__.py
+  |  |-summarizers.py
+  |  |-knowledge_graphs.py
+  |-__init__.py
+  |-utils
+  |  |-save_load.py
+  |  |-models.py
+  |  |-io.py
+  |  |-__init__.py
+  |  |-docs.py
+  |  |-schemas.py
 ```
 👉 __How to install__ </br>
 I recommend setting up a virtual environment with python version 3.10. Choose a name and replace it with the name below </br>
