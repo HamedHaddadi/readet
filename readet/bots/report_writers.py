@@ -3,7 +3,7 @@
 # ################################################## #
 import operator 
 from tqdm import tqdm 
-from typing import Union, List, Literal, Dict, Any, Annotated, TypedDict, Optional
+from typing import Union, List, Literal, Dict, Any, Annotated, TypedDict, Optional, Callable 
 from pydantic import BaseModel, Field 
 from os import path, makedirs, listdir 
 from .. utils import models 
@@ -12,6 +12,7 @@ from .. core.retrievers import Retriever
 from . agents import ReAct 
 # langchain and langgraph 
 from langchain_core.messages import HumanMessage, SystemMessage 
+from langchain_core.language_models.chat_models import BaseChatModel
 from langgraph.graph import StateGraph, START, END 
 from langgraph.constants import Send 
 
@@ -159,7 +160,6 @@ For Conclusion/Summary:
 - Do not include word count or any preamble in your response
 """
 
-
 class Section(BaseModel):
 	title: str = Field(description = "The title of the section")
 	description: str = Field(description = "brief overview of the main topics and concepts in this report")
@@ -173,8 +173,9 @@ class Sections(BaseModel):
 # graph states #
 class ReportState(TypedDict):
 	""" State of the document generation graph"""
-	topic: str
-	main_points: str 
+	user_query: str 
+	topic: str 
+	main_points: List[str]
 	max_number_of_queries: int 
 	sections: List[Section]
 	completed_sections: Annotated[List, operator.add]
@@ -182,8 +183,7 @@ class ReportState(TypedDict):
 	final_report: str 
 
 class ReportInputState(TypedDict):
-	topic: str 
-	main_points: str
+	user_query: str 
 
 class ReportOutputState(TypedDict):
 	final_report: str 
@@ -197,6 +197,25 @@ class SectionState(TypedDict):
 
 class SectionOutputState(TypedDict):
 	completed_sections: List[Section]
+
+# useful callables #
+class UserQuery(BaseModel):
+	topic: str = Field(description = "report topic extracted from user query")
+	main_points: List[str] = Field(description = "main points that describe what the user is interested in")
+
+class UserQueryAnalyzer(Callable):
+	def __init__(self, llm: str = "openai-gpt-4o"):
+		llm = models.configure_chat_model(llm)
+		self.llm = llm.with_structured_output(UserQuery)
+
+	def __call__(self, state: ReportState) -> Dict[str, Any]:
+		INSTRUCTIONS = """ you are an AI agent responsible to extract a topic and main points from a user query. Extract the topic and a
+		  list of main points from the user query; do not add any extra information in your response. Stay as close
+		   	as possible to users main points in the query """
+		query = state["user_query"]
+		response = self.llm.invoke([SystemMessage(content = INSTRUCTIONS),
+							  HumanMessage(content = query)])
+		return {"topic": response.topic, "main_points": response.main_points} 
 
 	
 # main class
@@ -244,6 +263,9 @@ class WriterWithScholarSearch:
 		self.section_writer = None 
 		self.report_writer = None 
 		self.built = False 
+
+		# functions and nodes #
+		self.analyze_user_query = UserQueryAnalyzer(llm = helper_llm)
 	
 	# Helper functions #
 	@staticmethod
@@ -266,7 +288,7 @@ class WriterWithScholarSearch:
 			self.search_agent(f"search and download all papers related to this question {q}")
 		
 		pdf_files = [path.join(self.save_path, f) for f in listdir(self.save_path) if f.endswith('.pdf')]
-		print(f"Building the vector space")
+		print(f"Building the vector store")
 		self.rag = CitationRAG(pdf_files, retriever = self.rag_arguments["retriever"], 
 								embeddings = self.rag_arguments["embeddings"], 
 								store_path = self.rag_arguments["store_path"], 
@@ -383,13 +405,15 @@ class WriterWithScholarSearch:
 	
 	def build_report_graph(self):
 		flow = StateGraph(ReportState, input = ReportInputState, output = ReportOutputState)
+		flow.add_node("analyze_user_query", self.analyze_user_query)
 		flow.add_node("plan_report", self.plan_report)
 		flow.add_node("write_section_with_research", self.section_writer)
 		flow.add_node("gather_completed_sections", self.gather_completed_sections)
 		flow.add_node("write_final_sections", self.write_final_sections)
 		flow.add_node("compile_final_report", self.compile_final_report)
 
-		flow.add_edge(START, "plan_report")
+		flow.add_edge(START, "analyze_user_query")
+		flow.add_edge("analyze_user_query", "plan_report")
 		flow.add_conditional_edges("plan_report", self.initiate_section_writing, ["write_section_with_research"])
 		flow.add_edge("write_section_with_research", "gather_completed_sections")
 		flow.add_conditional_edges("gather_completed_sections", self.initiate_final_section_writing, ["write_final_sections"])
@@ -403,15 +427,25 @@ class WriterWithScholarSearch:
 		self.build_report_graph()
 		self.built = True 
 	
-	def write(self, topic: str = None, main_points: str = None):
-		if not self.built:
-			self.build()
-		state = {"topic": topic, "main_points": main_points}
+	def write(self, query: str):
+		state = {"user_query": query}
 		report = self.report_writer.invoke(state)
 		return report["final_report"]
 	
-	def __call__(self, *args, **kwargs):
-		pass 
+	def write_stream(self, query:str):
+		thread = {"configurable": {"thread_id": 1}}
+		input = {"user_query": query}
+		for message, metadata in self.report_writer.stream(input, thread, stream_mode = "messages"):
+			if metadata["langgraph_node"] == "compile_final_report":
+				print(message.content, end = ' ')
+
+	def __call__(self, query, stream = True):
+		if not self.built:
+			self.build()
+		if stream:
+			self.write_stream(query)
+		else:
+			return self.write(query)
 
 	@classmethod
 	def from_previous_search(cls, store_path: str,

@@ -3,7 +3,7 @@ from typing import (Dict, List, Sequence, Union, Literal, Callable, Optional)
 from .. utils import models
 from .. core import tools as readet_tools   
 # langgraph imports
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import BaseTool   
 from langgraph.prebuilt import create_react_agent 
 from functools import reduce
@@ -101,6 +101,31 @@ class TextToCharts(Callable):
 		"""
 		self.agent(message)
 
+# ############################################# #
+# citation list agent 							#	
+
+class CitationList(Callable):
+	"""
+	Citation lister
+	"""
+	INSTRUCTIONS = """ you are a helpful assistant responsible for extracting citations from a paper. 
+            go to the bibliography or references section and find the cited articles. 
+            Do not add any preamble. Just list the references
+            Here is the text {text} """
+	 
+	def __init__(self, model: str = 'openai-gpt-4o-mini', response_key: str = 'citations'):
+		self.llm = models.configure_chat_model(model)
+		self.response_key = response_key
+
+	def __call__(self, pdf_file: str) -> List[str]:
+		text = docs.text_from_pdf(pdf_file)
+		instructions = self.INSTRUCTIONS.format(text = text)
+		response = self.llm.invoke([SystemMessage(content = self.INSTRUCTIONS.format(text = text)), 
+							  		HumanMessage(content = "list the citations in the reference or bibliography section")])
+		return response.citations
+
+
+	
 	
 	
 
