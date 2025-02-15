@@ -26,39 +26,35 @@ linux_file_path = "/home/me/documents/file.txt"
 
 ⚠️ this documentation explains how to use the functionalities using a minimal set of inputs and using default arguments. But you can control other parameters of each class or function. I will add more details in the documentation soon. </br>
 
-readet is a package developed using _LangChain_ for perusing scientific and technical literature. But all tools are applicable to any context. </br>
+readet is a package developed using _LangChain_ and _LangGraph_ for perusing scientific and technical literature and writing review articles and paper reviews. But some tools are applicable to any context; such as RAGs or Summarizers. </br>
 Eventhough several functionalities are included in this package, such as multi-agent systems, the following modules are used more frequently: </br>
 ➡️ summarizers that are used to summarize a text, mostly pdf files. </br>
 ➡️ RAGs or Retrieval Augmented Generation tools which can be used to ask questions about a document. </br>
-➡️ single shot agents that are used to download papers and patents in bulk. </br>
 ➡️ agentic systems for drafting articles and writing structured reviews. </br> 
 
 here is the current directory tree of the package </br>
 ```console
-|-bots
-  |  |-chat_tools.py
-  |  |-prebuilt.py
-  |  |-__init__.py
-  |  |-agents.py
-  |  |-multi_agents.py
-  |  |-components.py
-  |  |-report_writers.py
-  |-core
-  |  |-chains.py
-  |  |-rags.py
-  |  |-retrievers.py
-  |  |-tools.py
-  |  |-__init__.py
-  |  |-summarizers.py
-  |  |-knowledge_graphs.py
-  |-__init__.py
-  |-utils
-  |  |-save_load.py
-  |  |-models.py
-  |  |-io.py
-  |  |-__init__.py
-  |  |-docs.py
-  |  |-schemas.py
+ |-core
+ | |-chains.py
+ | |-rags.py
+ | |-retrievers.py
+ | |-tools.py
+ | |-__init__.py
+ | |-summarizers.py
+ | |-knowledge_graphs.py
+ |-__init__.py
+ |-agents
+ | |-__init__.py
+ | |-structured_reports.py
+ | |-helper_agents.py
+ | |-report_writers.py
+ |-utils
+ | |-save_load.py
+ | |-models.py
+ | |-io.py
+ | |-__init__.py
+ | |-docs.py
+ | |-schemas.py
 ```
 👉 __How to install__ </br>
 I recommend setting up a virtual environment with python version 3.10. Choose a name and replace it with the name below </br>
