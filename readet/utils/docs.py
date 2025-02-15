@@ -2,7 +2,7 @@ from langchain_community.document_loaders import PyPDFLoader, pdf
 from langchain_core.documents.base import Document, Blob 
 from langchain_community.document_loaders.parsers.pdf import PyPDFParser
 from langchain_text_splitters import RecursiveCharacterTextSplitter, TokenTextSplitter
-from typing import List, Union, Literal, Any 
+from typing import List, Union, Literal, Any, Optional
 from os import path, PathLike, listdir
 from pathlib import Path   
 from tqdm import tqdm  
@@ -11,7 +11,7 @@ from tqdm import tqdm
 # utilities to work with documents #
 # ################################ #
 
-def get_pdf_files(pdf_files: Union[str, List[str]]) -> List[PathLike]:
+def list_pdf_files(pdf_files: Union[str, List[str]]) -> List[PathLike]:
 	if isinstance(pdf_files, str):
 		return [path.join(pdf_files, file_name) for file_name in listdir(pdf_files) if file_name.endswith('.pdf')]
 	elif isinstance(pdf_files, (list, tuple)):
@@ -21,7 +21,8 @@ def get_pdf_files(pdf_files: Union[str, List[str]]) -> List[PathLike]:
 def doc_from_pdf_files(pdf_files: Union[str, List[str]], 
 						document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 						splitter: Literal['recursive', 'token'] | None = 'recursive',
-						chunk_size: int = 2000, chunk_overlap: int = 200) -> List[Document]:
+						chunk_size: int = 2000, chunk_overlap: int = 200, 
+							title_split_by: Optional[str] = '_') -> List[Document]:
 	
 	loader_obj = {'pypdf': PyPDFLoader, 'pymupdf': pdf.PyMuPDFLoader}[document_loader]		
 	if splitter == 'recursive':
@@ -34,7 +35,6 @@ def doc_from_pdf_files(pdf_files: Union[str, List[str]],
 	if not isinstance(pdf_files, (list, tuple)):
 		pdf_files = [pdf_files]
 
-	
 	def get_docs(loader: Any) -> List[Document]:
 		try:
 			if splitter is not None:
@@ -42,17 +42,23 @@ def doc_from_pdf_files(pdf_files: Union[str, List[str]],
 			else:
 				docs = loader.load()
 			return docs
-		except:
+		except Exception as e:
+			print('error ', e)
 			return None 
 
 	documents = []
+	titles = []
 	for pdf_file in tqdm(pdf_files):
 		loader = loader_obj(pdf_file, extract_images = True)
 		docs = get_docs(loader)
 		if docs is not None:
+			title = Path(pdf_file).stem
+			if title_split_by is not None:
+				title = ' '.join(title.split(title_split_by))
+			titles.append(title)
 			documents.extend(docs)
-		
-	return documents
+
+	return documents, titles
 
 
 def text_from_pdf(document: Union[str, PathLike]) -> Union[str, None]:
