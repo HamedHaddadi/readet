@@ -101,7 +101,7 @@ class PlainRAG(Callable):
 	def __init__(self, documents: Optional[Union[List[Document], List[str], str]] = None, retriever: Union[str, Retriever] = 'parent-document', 
 				embeddings: str = 'openai-text-embedding-3-large', 
 					store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
-					pkl_object: Optional[str| Dict] = None,
+					json_object: Optional[str] = None,
 					chat_model: str = 'openai-gpt-4o-mini',
 						prompt: Optional[str] = PLAIN_RAG_PROMPT,
 					document_loader: Literal['pypdf', 'pymupdf'] = 'pymupdf', 
@@ -113,7 +113,7 @@ class PlainRAG(Callable):
 		elif isinstance(retriever, str) and retriever.lower() in AVAILABLE_RETRIEVERS:
 			self.retriever = get_retriever(documents = documents, retriever_type = retriever,
 				embeddings = embeddings, document_loader = document_loader, splitter = splitter,
-				 	store_path = store_path, load_version_number = load_version_number, pkl_object = pkl_object, **kwargs)
+				 	store_path = store_path, load_version_number = load_version_number, json_object = json_object, **kwargs)
 		else:
 			raise ValueError(f"retriever must be a Retriever object or a string in ['parent-document']")
 		
@@ -189,13 +189,13 @@ class RAGWithCitations(PlainRAG):
 	def __init__(self, documents: Optional[Union[List[Document], List[str], str]] = None, retriever: Union[str, Retriever] = 'parent-document', 
 				embeddings: str = 'openai-text-embedding-3-large', 
 					store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
-					pkl_object: Optional[str| Dict] = None, chat_model: str = 'openai-gpt-4o-mini',
+					json_object: Optional[str] = None, chat_model: str = 'openai-gpt-4o-mini',
 						prompt: Optional[str] = PLAIN_RAG_PROMPT,
 					document_loader: Literal['pypdf', 'pymupdf'] = 'pymupdf', 
 						splitter: Literal['recursive', 'token'] = 'recursive',
 							kwargs: Dict[str, Any] = {}):
 		super(RAGWithCitations, self).__init__(documents=documents, retriever=retriever, embeddings=embeddings, store_path=store_path,
-					load_version_number = load_version_number, pkl_object = pkl_object, chat_model=chat_model, prompt=prompt, 
+					load_version_number = load_version_number, json_object = json_object, chat_model=chat_model, prompt=prompt, 
 						document_loader=document_loader, splitter=splitter, kwargs=kwargs)
 
 	@staticmethod
@@ -249,13 +249,13 @@ class CitationRAG(PlainRAG):
 	def __init__(self, documents: Optional[Union[List[Document], List[str], str]] = None, retriever: Union[str, Retriever] = 'parent-document', 
 				embeddings: str = 'openai-text-embedding-3-large', 
 					store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
-					pkl_object: Optional[str| Dict] = None, chat_model: str = 'openai-gpt-4o-mini',
+					json_object: Optional[str] = None, chat_model: str = 'openai-gpt-4o-mini',
 						prompt: Optional[str] = CITATION_RAG_PROMPT,
 					document_loader: Literal['pypdf', 'pymupdf'] = 'pymupdf', 
 						splitter: Literal['recursive', 'token'] = 'recursive',
 							kwargs: Dict[str, Any] = {}):
 		super(CitationRAG, self).__init__(documents=documents, retriever=retriever, embeddings=embeddings, store_path=store_path,
-					load_version_number = load_version_number, pkl_object = pkl_object, chat_model=chat_model, prompt=prompt, 
+					load_version_number = load_version_number, json_object = json_object, chat_model=chat_model, prompt=prompt, 
 						document_loader=document_loader, splitter=splitter, kwargs=kwargs)
 		self.rag_chain = self.prompt | self.llm 
 		self.built = False 
@@ -357,7 +357,7 @@ class SelfRAG:
 	def __init__(self, documents: Optional[Union[List[Document],List[str],str]] = None,
 		retriever: Union[Literal['parent-document', 'plain'], Retriever] = 'parent-document',
 			store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
-			pkl_object: Optional[str| Dict] = None,
+				json_object: Optional[str] = None,
 				splitter: Literal['recursive', 'token'] = 'recursive',
 					document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 						 chat_model: str = 'openai-gpt-4o-mini', 
@@ -371,7 +371,7 @@ class SelfRAG:
 		elif isinstance(retriever, str) and retriever.lower() in AVAILABLE_RETRIEVERS:
 			self.retriever = get_retriever(documents = documents, retriever_type = retriever,
 				embeddings = embeddings, document_loader = document_loader, splitter = splitter,
-					store_path = store_path, load_version_number = load_version_number, pkl_object = pkl_object, **kwargs)
+					store_path = store_path, load_version_number = load_version_number, json_object = json_object, **kwargs)
 		else:
 			raise ValueError(f"retriever must be a Retriever object or a string in ['parent-document']")
 		
@@ -645,7 +645,7 @@ class AgenticRAG:
 	def __init__(self, documents: Optional[Union[List[Document],List[str],str]] = None,
 			  	retriever: Union[Literal['parent-document', 'plain'], Retriever] = 'parent-document',
 				  store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
-				  pkl_object: Optional[str| Dict] = None, splitter: Literal['recursive', 'token'] = 'recursive',
+				  json_object: Optional[str| Dict] = None, splitter: Literal['recursive', 'token'] = 'recursive',
 						document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 								chat_model: str = "openai-gpt-4o-mini", 
 									embeddings: str = "openai-text-embedding-3-large", 
@@ -657,7 +657,7 @@ class AgenticRAG:
 		elif isinstance(retriever, str) and retriever.lower() in AVAILABLE_RETRIEVERS:
 			self.retriever = get_retriever(documents = documents, retriever_type = retriever,
 				embeddings = embeddings, document_loader = document_loader, splitter = splitter,
-					store_path = store_path, load_version_number = load_version_number, pkl_object = pkl_object, **kwargs)
+					store_path = store_path, load_version_number = load_version_number, json_object = json_object, **kwargs)
 		else:
 			raise ValueError(f"retriever must be a Retriever object or a string in ['parent-document']")
 		
@@ -849,7 +849,7 @@ class RAGEnsemble(Callable):
 	def __init__(self, documents: List[Document] | List[str] | str,
 				retriever: Literal['parent-document'] = 'parent-document',
 					store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
-					pkl_object: Optional[str| Dict] = None, splitter: Literal['recursive', 'token'] = 'recursive',
+					json_object: Optional[str] = None, splitter: Literal['recursive', 'token'] = 'recursive',
 						document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 								chat_model: str = "openai-gpt-4o-mini", 
 									embeddings: str = "openai-text-embedding-3-large", 
@@ -857,7 +857,7 @@ class RAGEnsemble(Callable):
 		
 		self.retriever = get_retriever(documents = documents, retriever_type = retriever,
 								 embeddings = embeddings, document_loader = document_loader, splitter = splitter,
-								 store_path = store_path, load_version_number = load_version_number, pkl_object = pkl_object, **kwargs)
+								 store_path = store_path, load_version_number = load_version_number, json_object = json_object, **kwargs)
 		self.rags = {}
 		for rag_name, rag in self.RAG_TYPES.items():
 			self.rags[rag_name] = rag(documents = None, retriever = self.retriever, chat_model = chat_model) 
@@ -916,7 +916,7 @@ class AdaptiveRAG:
 	def __init__(self, documents: List[Document] | List[str] | str,
 				retriever: Literal['parent-document'] = 'parent-document',
 					store_path: Optional[str] = None, load_version_number: Optional[Literal['last'] | int] = None,
-					pkl_object: Optional[str| Dict] = None, splitter: Literal['recursive', 'token'] = 'recursive',
+					json_object: Optional[str] = None, splitter: Literal['recursive', 'token'] = 'recursive',
 						document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 								chat_model: str = "openai-gpt-4o-mini", 
 									embeddings: str = "openai-text-embedding-3-large", 
@@ -927,7 +927,7 @@ class AdaptiveRAG:
 		elif isinstance(retriever, str) and retriever.lower() in AVAILABLE_RETRIEVERS:
 			self.retriever = get_retriever(documents = documents, retriever_type = retriever,
 				embeddings = embeddings, document_loader = document_loader, splitter = splitter,
-					store_path = store_path, load_version_number = load_version_number, pkl_object = pkl_object, **kwargs)
+					store_path = store_path, load_version_number = load_version_number, json_object = json_object, **kwargs)
 		else:
 			raise ValueError(f"retriever must be a Retriever object or a string in ['parent-document']")
 		

@@ -2,7 +2,7 @@ from langchain_community.document_loaders import PyPDFLoader, pdf
 from langchain_core.documents.base import Document, Blob 
 from langchain_community.document_loaders.parsers.pdf import PyPDFParser
 from langchain_text_splitters import RecursiveCharacterTextSplitter, TokenTextSplitter
-from typing import List, Union, Literal, Any, Optional
+from typing import List, Union, Literal, Any, Optional, Dict 
 from os import path, PathLike, listdir
 from pathlib import Path   
 from tqdm import tqdm  
@@ -22,7 +22,8 @@ def doc_from_pdf_files(pdf_files: Union[str, List[str]],
 						document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf',
 						splitter: Literal['recursive', 'token'] | None = 'recursive',
 						chunk_size: int = 2000, chunk_overlap: int = 200, 
-							title_split_by: Optional[str] = '_') -> List[Document]:
+							title_split_by: Optional[str] = '_', 
+								title_url_file: Optional[str] = None) -> List[Document]:
 	
 	loader_obj = {'pypdf': PyPDFLoader, 'pymupdf': pdf.PyMuPDFLoader}[document_loader]		
 	if splitter == 'recursive':
@@ -48,6 +49,10 @@ def doc_from_pdf_files(pdf_files: Union[str, List[str]],
 
 	documents = []
 	titles = []
+	title_url = {}
+	if title_url_file is not None:
+		title_url = title_url_map(title_url_file)
+
 	for pdf_file in tqdm(pdf_files):
 		loader = loader_obj(pdf_file, extract_images = True)
 		docs = get_docs(loader)
@@ -56,6 +61,8 @@ def doc_from_pdf_files(pdf_files: Union[str, List[str]],
 			if title_split_by is not None:
 				title = ' '.join(title.split(title_split_by))
 			titles.append(title)
+			if title in title_url:
+				docs = insert_title_url_in_metadata(docs, title = title, url =  title_url[title])
 			documents.extend(docs)
 
 	return documents, titles
@@ -71,6 +78,30 @@ def text_from_pdf(document: Union[str, PathLike]) -> Union[str, None]:
 			return text 
 		else:
 			return None 
+
+
+def title_url_map(analytics_file: str) -> Dict[str, str]:
+	"""
+	Reads an analytics file and returns a dictionary of title to url mappings.
+	"""
+	title_url = {}
+	with open(analytics_file, 'r') as f:
+		lines = f.readlines()
+		for line in lines:
+			url = 'None'
+			if 'Title:' in line:
+				title = line.split('Title: ')[1].strip()
+			if 'PDF Link: ' in line:
+				url = line.split('PDF Link: ')[1].strip()
+			if 'None' not in url:
+				title_url[title] = url
+	return title_url
+
+def insert_title_url_in_metadata(docs: List[Document], title: str, url: str) -> List[Document]:
+	for doc in docs:
+		doc.metadata['source'] = title
+		doc.metadata['url'] = url
+	return docs
 
 # ### generates Document objects from an encoded file ### #
 # useful for web apps that need pdf upload

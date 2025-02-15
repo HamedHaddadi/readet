@@ -31,7 +31,7 @@ def format_documents(documents: List[Document]) -> str:
 
 def load_retriever_from_disk(store_path: Optional[str] = None,
 						  version_number: Literal['last'] | int = 'last', 
-						  json_object: Optional[str| Dict] = None) -> Dict[str, Any]:
+						  json_object: Optional[str] = None) -> Dict[str, Any]:
 	
 	if store_path is not None and json_object is None:
 		versions = sorted([file_name for file_name in listdir(store_path) if file_name.startswith("persisted_retriever_")])
@@ -164,7 +164,7 @@ class RetrieverShim(Retriever):
 	
 	@classmethod
 	def load_from_disk(cls, store_path: str, documents: Optional[Union[str, List[str], List[Document]]] = None,
-					 version_number: Literal['last'] | int = 'last', json_object: Optional[str| Dict] = None,
+					 version_number: Literal['last'] | int = 'last', json_object: Optional[str] = None,
 						embeddings: str = 'openai-text-embedding-3-large', document_loader: Literal['pypdf', 'pymupdf'] = 'pypdf', 
 							parent_splitter: Literal['recursive', 'token'] = 'recursive', child_splitter: Literal['recursive', 'token'] = 'recursive',
 								parent_chunk_size: int = 2000, parent_chunk_overlap: int = 200, child_chunk_size: int = 2000, child_chunk_overlap: int = 100) -> Retriever:
@@ -184,8 +184,6 @@ class RetrieverShim(Retriever):
 		
 		documents = loaded_docs + document_objects
 		titles = loaded_titles + titles
-
-		print('documents: ', documents)
 		
 		return cls(documents, titles = titles, embeddings = embeddings, store_path = store_path, 
 					parent_splitter = parent_splitter, child_splitter = child_splitter, 
